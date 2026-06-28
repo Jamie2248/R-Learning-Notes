@@ -458,20 +458,56 @@ ggplot(mpg, aes(x = hwy, y = drv)) +
 
 # facet -------------------------------------------------------------------
 'grid是兩個變數'
+'嚴格的棋盤格（矩陣），絕不換行'
 ggplot(mpg, aes(x = displ, y = hwy)) + 
   geom_point() + 
   facet_grid(drv ~ cyl, scales = "free")
 #var1~var2 => 拆成n(var1)*n(var2)個
 #"free_x"(或y) =>允許x,y軸不同，把plot散開來
 
-'wrap是一個變數'
+'wrap是一個變數' 
+'像寫字一樣，從左到右，滿了就自動換行'"(所以一定是~var,所以才能填滿col)"
 ggplot(mpg) + 
   geom_point(aes(x = displ, y = hwy)) + 
-  facet_wrap(.~ class, nrow = 2) #.有沒有沒差? #ncol
+  facet_wrap(~ class, nrow = 2) #ncol
 
 #dir: 垂直水平
 
+#舉例
+head(diamonds)
+glimpse(diamonds)
 
+'不同切割品質 (cut)」下，克拉與價格的關係'
+ggplot(data = diamonds, aes(x = carat, y = price)) +
+  geom_point(alpha = 0.2) +
+  facet_wrap(~ cut, ncol = 2, scales = 'free_x')
+
+'比對「切割 (cut)」與「顏色 (color)」的組合'
+ggplot(data = diamonds, aes(x = carat, y = price)) +
+  geom_hex() + # point 改用 hex 比較不會卡
+  facet_grid(cut ~ color)
+
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_hex() +
+  facet_grid(color ~ ., scales = "free")
+
+#9.4.1 Exercises
+'Recreate the following plot using facet_wrap()'
+ggplot(mpg) + 
+  geom_point(aes(x = displ, y = hwy)) +
+  facet_grid(drv ~ .)
+
+ggplot(mpg) + 
+  geom_point(aes(x = displ, y = hwy)) +
+  facet_wrap( ~ drv, nrow = 3) 
+# Rows ~ Columns
+
+
+# -------------------------------------------------------------------------
+
+?geom_bar()
+
+?stat_bin
 
 
 
