@@ -466,7 +466,7 @@ ggplot(mpg, aes(x = displ, y = hwy)) +
 #"free_x"(或y) =>允許x,y軸不同，把plot散開來
 
 'wrap是一個變數' 
-'像寫字一樣，從左到右，滿了就自動換行'"(所以一定是~var,所以才能填滿col)"
+'像寫字一樣，從左到右，滿了就自動換行'  "(所以一定是~var,所以才能填滿col)"
 ggplot(mpg) + 
   geom_point(aes(x = displ, y = hwy)) + 
   facet_wrap(~ class, nrow = 2) #ncol
@@ -505,9 +505,416 @@ ggplot(mpg) +
 
 # -------------------------------------------------------------------------
 
-?geom_bar()
+geom_bar(stat = "identity") #stat = "identity" :不要用預設的count,用我給的資料去畫圖
+geom_col() # 跟上面一樣，跟geom_bar差在後者是用於data是一筆一筆observation的狀態
+#如果已經依照類別統計好數字了，用geom_col就好，geom_col(x=類別,y=數字)
 
-?stat_bin
+#display a bar chart of proportions :y = after_stat(prop), group = 1
+ggplot(diamonds, aes(x = cut, y = after_stat(prop), group = 1)) + 
+  geom_bar()
+#再多包含diamonds color,有顏色的版本
+ggplot(diamonds, aes(x = cut, fill = color, y = after_stat(prop), group = color)) + 
+  geom_bar()
+
+#
+diamonds_summary <- diamonds %>% 
+  group_by(cut) %>% 
+  summarise(y_median = median(depth),   # 算出中位數
+            y_min    = min(depth),      # 算出最小值
+            y_max    = max(depth))      # 算出最大值
+
+ggplot(diamonds_summary, aes(x = cut)) +
+  geom_pointrange(aes(y = y_median, 
+                      ymin = y_min, 
+                      ymax = y_max),
+                  color = "royalblue", size = 0.8) +
+  labs(title = "不同切割品質的深度（中位數與範圍）", y = "depth")
+   #or
+diamonds |>
+  group_by(cut) |>
+  summarize(
+    lower = min(depth),
+    upper = max(depth),
+    midpoint = median(depth)
+  ) |>
+  ggplot(aes(x = cut, y = midpoint)) +
+  geom_pointrange(aes(ymin = lower, ymax = upper))
+
+# -------------------------------------------------------------------------
+# position = "fill" : 比較成分多寡 (疊在一起))
+ggplot(mpg, aes(x = drv, fill = class)) + 
+  geom_bar(position = "fill")
+
+# position = "dodge" : (分散 都從底部開始畫)
+ggplot(mpg, aes(x = drv, fill = class)) + 
+  geom_bar(position = "dodge")
+
+
+# -避免overplotting，adds random noise to the location of the points-------------------------------------------------------------
+
+geom_point(position = "jitter")
+geom_jitter(height = 1, width = 1) #跟上面一樣
+
+#或是+geom_count()，就能用點的大小看重疊的分佈狀況了
+
+
+# 圓餅圖 ---------------------------------------------------------------------
+
+ggplot(diamonds, aes(x = "", fill = cut)) +
+  geom_bar() + 
+  coord_polar(theta = "y") #coord_polar()
+
+# -------------------------------------------------------------------------
+ggplot(data = mpg, mapping = aes(x = cty, y = hwy)) +
+  geom_point() + 
+  geom_abline() + #畫y=x的直線。 預設: intercept = 0, slope = 1 (?)
+  coord_fixed() #防止視窗拉長，把圖表形狀扭曲
+
+# CH10, EDA ---------------------------------------------------------------------
+
++ coord_cartesian(ylim = c(0, 50)) #限制Y軸的上下限 顯示哪個範圍就好
+
+unusual <- diamonds |>     #outlier
+  filter(y < 3 | y > 20) |> 
+  select(price, x, y, z) |>
+  arrange(y)
+
+unusual
+
+#10.3.3 Exercises
+'Explore the distribution of each of the x, y, and z variables in diamonds'
+cleaned_diamonds <- diamonds |>
+  filter(x > 0, y >0, y < 20, z >0, z <20)
+
+cleaned_diamonds |>
+  pivot_longer(cols = c(x, y, z),
+               names_to = "dimension",
+               values_to = "value") |>
+  ggplot(aes(x = value)) +  # 我的X軸要是哪個欄位的值
+  geom_histogram(binwidth = 0.1, fill = "seagreen", color = "white") +
+  facet_wrap( ~ dimension, scales = "free", ncol = 1)
+
+summary(diamonds)
+
+# 2D
+ggplot(diamonds, aes(x, y, color = z)) +
+  geom_point(position = "jitter", alpha = 0.5, na.rm = TRUE)
+
+# 3D圖 ---------------------------------------------------------------------
+install.packages("plotly")
+library(plotly)
+
+plot_ly(diamonds, 
+        x = ~x, y = ~y, z = ~z, 
+        type = 'scatter3d', 
+        mode = 'markers')
+
+# Q2 ----------------------------------------------------------------------
+
+'Explore the distribution of price'
+diamonds |>
+  ggplot(aes(x = price)) +
+  geom_histogram(binwidth = 500, fill = "royalblue", color = "white") +
+  labs(title ="粗略的價格分配(binwidth = 500)")
+
+diamonds |>
+  ggplot(aes(x = price)) +
+  geom_histogram(binwidth = 10, fill = "coral") +
+  labs(title ="精細的價格分配(binwidth = 10)") + 
+  coord_cartesian(xlim = c(0, 2500))
+
+#做 EDA 時，同一張圖一定要大大小小調整各種組距
+
+# Q3 ----------------------------------------------------------------------
+
+'How many diamonds are 0.99 carat? How many are 1 carat?'
+carat_0.99 <- diamonds |>
+  filter(carat == 0.99)
+nrow(carat_0.99)
+
+carat_1 <- diamonds |>
+  filter(carat == 1)
+nrow(carat_1)
+
+# Q4 ----------------------------------------------------------------------
+"Compare and contrast coord_cartesian() vs. xlim() or ylim() when zooming in on a histogram."
+# coord_cartesian() 是不改變原圖形狀的放大鏡
+# xlim() or ylim() 會先去除掉資料 再重新做一個圖形
+
+# 想放大看細節，用這個!!!
+# 確定要把特定範圍外的髒資料「從資料庫裡踢除」
+# -------------------------------------------------------------------------
+
+#recommend replacing the unusual values with missing values
+diamonds2 <- diamonds |> 
+  mutate(y = if_else(y < 3 | y > 20, NA, y))
+
+# geom_bar柱子的頂端用線相連，形成折線圖
+geom_freqpoly() #避免直方圖柱子互相檔到
+
+#10.4.1 Exercises
+#histogram 的NA(因為是處理連續型變數)，所以會直接剔除
+#bar chart 的NA(因為是處理類別型)，所以會獨立形成一個bar，告訴你有多少遺失值
+
+'frequency plot of scheduled_dep_time colored:cancelled flight. 
+Also facet:cancelled. 
+Experiment with different values of the scales variable in the faceting function to mitigate the effect of more non-cancelled flights than cancelled flights.'
+# 1. from textbook
+flights_dt <- flights %>% 
+  mutate(
+    cancelled = is.na(dep_time),
+    sched_hour = sched_dep_time %/% 100,
+    sched_min = sched_dep_time %% 100,
+    sched_dep_time = sched_hour + (sched_min / 60) )
+
+# 2. 依照題目要求畫圖
+ggplot(flights_dt, aes(x = sched_dep_time)) + 
+  geom_freqpoly(aes(color = cancelled), binwidth = 1/4) +  # 用顏色（color）區分是否取消，每 15 分鐘（1/4小時）畫一條折線
+  facet_wrap(~ cancelled, scales = "free_y", ncol = 1)
+
+# covariation -------------------------------------------------------------
+
+'how the price of a diamond varies with its quality (measured by cut) '
+# count的版本
+diamonds |>
+  ggplot(aes(x = price)) +
+  geom_freqpoly((aes( color = cut)), binwidth = 500, linewidth = 0.75)
+#frepoly跟bar是同一家人，要留意bar的規則，只能放一個我要的值(x=value's var name)，
+#這樣它才會去count出Y軸!
+
+'after_stat'
+# density的版本 : y = after_stat(density)
+diamonds |>
+  ggplot(aes(x = price, y = after_stat(density))) +
+  geom_freqpoly((aes(color = cut)), binwidth = 500, linewidth = 0.75)
+
+# price & cut(是有order過的factor!) 
+ggplot(diamonds, aes(x = cut, y = price)) +
+  geom_boxplot()
+
+class(diamonds$cut) #只打cut會找到別的函數
+
+'how highway mileage varies across classes'
+mpg |>
+  ggplot(aes(x = class, y = hwy)) +
+  geom_boxplot()
+
+# make the trend easier to see
+#fct_reorder(原本的var, 要依照哪個var, 的什麼東西來排順序)
+mpg |>
+  ggplot(aes(x = fct_reorder(class, hwy, median), y = hwy)) +
+  geom_boxplot()
+
+# -------------------------------------------------------------------------
+
+#變成平行 way1 : x y互換 
+mpg |>
+  ggplot(aes(x =  hwy, y = fct_reorder(class, hwy, median))) +
+  geom_boxplot()
+
+# way2 : coord_flip()
+mpg |>
+  ggplot(aes(x = fct_reorder(class, hwy, median), y = hwy)) +
+  geom_boxplot() +
+  coord_flip()
+
+# -------------------------------------------------------------------------
+
+#10.5.1.1 Exercises
+'departure times of cancelled vs. non-cancelled flights.'
+flights |>
+  mutate(cancelled = is.na(dep_time),
+         sched_hour = sched_dep_time %/% 100,
+         sched_min = sched_dep_time %% 100,
+         sched_dep_time = sched_hour + (sched_min / 60)) |>
+  ggplot(aes(x = sched_dep_time, y = after_stat(density))) + #y軸不是count,是density的話，要加這行!
+  geom_freqpoly(aes(color = cancelled), binwidth = 0.5, linewidth = 1) +
+  #以下是多的
+  scale_color_brewer(palette = "Set1", labels = c("Non-cancelled", "Cancelled"))+
+  labs(title = "Departure Time Distribution: Cancelled vs. Non-cancelled Flights",
+       x = "Scheduled Departure Time (Hours after midnight)",
+       y = "Density",
+       color = "Flight Status") +
+  theme_minimal() #讓灰底網格消失
+
+# Q2 ----------------------------------------------------------------------
+'what variable in the diamonds dataset appears to be most important for predicting the price of a diamond'
+#連續 類別 要分開處理!
+#連續: (看point)
+diamonds_conti <- diamonds |>
+  select(price, carat, depth, table, x, y, z) |>
+  pivot_longer(cols = -price,
+               names_to = "all_var",
+               values_to = "value")
+ggplot(data = diamonds_conti, mapping = aes(x = value, y = price)) + #注意x是
+  geom_point(alpha = 0.1) +
+  facet_wrap( ~ all_var, scales = "free") # all continuos var
+
+#類別: (看boxplot)
+diamonds_cat <- diamonds |>
+  select(price, cut, color, clarity) |>
+  mutate(across(c(cut, color, clarity), as.character)) |>   #convert ordered factors  #across
+  pivot_longer(cols = -price,
+               names_to = "all_var_1",
+               values_to = "value_1")
+
+ggplot(data = diamonds_cat, mapping = aes(x = fct_reorder(value_1, price, median), y = price)) +
+  geom_boxplot() +
+  facet_wrap( ~ all_var_1, scales = "free_x") # all category var
+
+' How is that variable correlated with cut?'
+#根據上題 最影響的var是carat
+diamonds |>
+  select(carat, cut, price) |>
+  ggplot(aes(x = fct_reorder(cut, price, median), y = carat)) +
+  geom_boxplot()
+
+
+# Q3 -------------------------------------------------------------------------
+# geom_lv() : （Letter-Value Plot，字母值圖）是盒狀圖的延伸
+install.packages("lvplot", dependencies = TRUE)
+library(lvplot)
+install.packages("ggplot2")
+library(ggplot2)
+
+'after_stat'
+ggplot(diamonds, aes(x = cut, y = price)) +
+  geom_lv(aes(fill = after_stat(LV))) + # 自動根據不同的 letter value 填色
+  scale_fill_brewer(palette = "Blues", direction = -1) + # 讓越寬的盒子顏色越深
+  theme_minimal()
+
+# Q4 ----------------------------------------------------------------------
+'prices vs. a categorical variable. pros and cons of 看distribution of a numerical variable based on the levels of a categorical variable?'
+
+# 1. geom_violin()
+ggplot(diamonds, aes(x = cut, y = price)) +
+  geom_violin()
+'對比各組的中位數 (pros)/(cons) 將左右對稱對稱化'
+
+# 2. Faceted geom_histogram()
+ggplot(diamonds, aes(x = price)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~ cut, scales = "free_y")
+'獨立分格，不會有線條或圖層重疊遮擋的問題 / 鋸齒狀外觀、難精準對比不同組別在「同一個 X 軸點」上的高低落差'
+
+# 3. Colored geom_freqpoly()
+ggplot(diamonds, aes(x = price, y = after_stat(density), color = cut)) +
+  geom_freqpoly(bins = 30)
+'對比局部波峰的 X 軸位置 / 顏色>3時 視覺上很亂'
+
+# 4. Colored geom_density()
+ggplot(diamonds, aes(x = price, fill = cut)) +
+  geom_density(alpha = 0.2)
+'平滑化外觀(且比折線圖更美觀)、易看出整體的微幅波動趨勢與形狀 / 在邊界會有「超出真實範圍」的平滑估算誤差、顏色>3時 半透明圖疊起來會變髒髒的'
+
+# Q5 ----------------------------------------------------------------------
+install.packages('ggbeeswarm')
+library(ggbeeswarm) #蜂群 # geom_jitter() => 隨機打散
+
+# 蜂群(一)
+'geom_beeswarm()'  #點會向兩側對稱地規律排開，寬度直接反映了該點的密度
+   # method = "swarm"(預設)/"compactswarm"(點的間距)/"hex"(點呈現六角蜂巢)/"square"(點呈現方正地水平/垂直對齊)
+
+# 蜂群(二)
+'geom_quasirandom()'  # jitter隨機 + beeswarm蜂群排序 :避免排得太寬超出圖表
+   # method = "tukey"(預設)/"frowney"(點呈現小提琴圖)
+
+
+# 10.5.2 Two categorical variables ----------------------------------------
+
+'二維圖(用點的大小呈現)'
+# + geom_count() 
+
+'表格(tibble 數字)'                       
+# count(類別var1, 類別var2) 
+# 再+ geom_tile(aes(fill = n)) =>
+'二維圖(用方塊顏色深淺呈現)' 
+                                                  
+#10.5.2.1 Exercises --------------------------------------------
+
+'在各個 Color之內，Cut 的比例分佈 (Color 內加總 = 100%)'
+diamonds |> 
+  count(color, cut) |>   #count完就會有n
+  group_by(color) |>     #你的組別是color
+  mutate(prop = n / sum(n)) |>   #用n做出新的欄位(比例)
+  ggplot(aes(x = color, y = cut, fill = prop)) +  #map
+  geom_tile() +
+  scale_fill_viridis_c()  #改顏色(?
+
+# bar : 類別型 ---------------------------------------------------------------------
+'#position = "stack"是預設值'
+ggplot(diamonds, aes(x = color)) + 
+  geom_bar(aes(fill = cut), position = "stack") 
+
+'# position = "fill"' '#改成所有bar高度拉成1 => 變成是在看每個x的組別裡的各色佔比'
+ggplot(diamonds, aes(x = color)) + 
+  geom_bar(aes(fill = cut), position = "fill") 
+
+'# 加 group = 1 => 每個 color 不用是獨立的 100%'
+ggplot(diamonds, aes(x = color)) +
+  geom_bar(group = 1)
+'# Y從計數變比例 : 加上 y = after_stat(prop)'  
+ggplot(diamonds, aes(x = color, y = after_stat(prop), group = 1)) + 
+  geom_bar()
+
+# 折線圖(geom_freqpoly) : 連續型 ------------------------------------------------
+'y = after_stat(density)'
+ggplot(flights, aes(x = sched_dep_time, y = after_stat(density), color = cancelled)) +
+  geom_freqpoly()
+
+# '航班延誤探索' ----------------------------------------------------------------
+
+library(nycflights13)
+
+# 1. 找出前 20 大目的地
+top_dest <- flights |> 
+  count(dest, sort = TRUE) |> 
+  slice_max(n, n = 20) |> 
+  pull(dest)
+
+# 2. 篩選資料、計算平均延誤並繪圖
+flights |> 
+  filter(dest %in% top_dest) |> 
+  group_by(dest, month) |> 
+  summarize(avg_delay = mean(dep_delay, na.rm = TRUE), .groups = "drop") |> 
+  mutate(month = factor(month)) |> # 轉成因子，避免 X 軸連續漸層
+  ggplot(aes(x = month, y = dest, fill = avg_delay)) +
+  geom_tile() +
+  scale_fill_viridis_c(name = "Avg Delay (min)") +
+  theme_minimal()
+
+
+# 10.5.3 Two numerical variables ------------------------------------------
+
+'舊方法'
+ggplot(diamonds, aes(x = carat, y = price)) + 
+  geom_point(alpha = 1 / 100)
+
+'新*2'
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_bin2d()
+#> `stat_bin2d()` using `bins = 30`. Pick better value `binwidth`.
+#所以 bins 跟 binwidth不一樣，但他們各別是啥?
+
+install.packages("hexbin")
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_hex()
+# hex = 六角形
+
+'bin 連續型變數，for each group, display a boxplot:'
+ggplot(diamonds, aes(x = carat, y = price)) + 
+  geom_boxplot(aes(group = cut_width(carat, 0.1)))  # bin var"carat" =>
+# group = cut_width(conti_var_name, 我想要的width)
+
+# 10.5.3.1 Exercises ------------------------------------------------------
+
+
+
+
+
+
+
+
 
 
 
