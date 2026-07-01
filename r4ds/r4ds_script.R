@@ -890,29 +890,173 @@ flights |>
 ggplot(diamonds, aes(x = carat, y = price)) + 
   geom_point(alpha = 1 / 100)
 
-'新*2'
+'新*2#Binned plot（區間箱化圖）會把資料「格子化」並加總'
+'1. 方塊...?二維直方圖?不會重疊?'
 ggplot(diamonds, aes(x = carat, y = price)) +
-  geom_bin2d()
+  geom_bin2d()  
 #> `stat_bin2d()` using `bins = 30`. Pick better value `binwidth`.
-#所以 bins 跟 binwidth不一樣，但他們各別是啥?
+#所以 bins 跟 binwidth不一樣。但他們各別是啥?
 
+'2. hex = 六角形'
 install.packages("hexbin")
 ggplot(diamonds, aes(x = carat, y = price)) +
   geom_hex()
-# hex = 六角形
 
 'bin 連續型變數，for each group, display a boxplot:'
-ggplot(diamonds, aes(x = carat, y = price)) + 
-  geom_boxplot(aes(group = cut_width(carat, 0.1)))  # bin var"carat" =>
 # group = cut_width(conti_var_name, 我想要的width)
+ggplot(diamonds, aes(x = carat, y = price)) + 
+  geom_boxplot(aes(group = cut_width(carat, 0.1)))  # bin var = "carat" 
+# group也可以改成color
+
+# --棒棒糖圖 (Lollipop Chart)-----------------------------------------------------------------------
+
+# 先計算次數
+library(dplyr)
+dia_count <- diamonds %>% dplyr::count(color)
+
+
+#geom_segment()  (蛤 那跟geom_line()有什麼差嗎?)
+ggplot(dia_count, aes(x = color, y = n)) +
+  geom_segment(aes(x = color, xend = color, y = 0, yend = n), color = "grey", lwd = 2) + # 桿子
+  geom_point(color = "orange", size = 3) + # 糖果
+  coord_flip()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # 關鍵：文字旋轉 45 度
+
+#table()可以算任何形式的資料
+#count()只能算一個df或tibble的某個指定變數 => 所以是count(df/tibble, var_name)
+#n()只能用在summarise,mutate裡 括號裡不放變數名稱 空著就好(前面會先用group_by分好組 所以已經知道要算什麼了)
+
+# 更多note ------------------------------------------------------------------
+
+#(1) Density（密度曲線）就是把Histogram（直方圖）的柱子切得無限細，再用一條平滑的曲線把頂端連起來
+#(2) 加group = 1 的時機: 
+# 當我想要Y軸是比例，此時若 X 軸不是連續數值或日期物件時，R畫折線圖或長條圖時會不知道怎麼連。加上去之後R就知道要把所有 X 軸的類別看成「同一個大母體」，這樣計算百分比時，分母才會是「全部人的總和（100%）」，進而得到加總等於 1
+#(類別型:geom_bar()、y = after_stat(prop)、group = 1(也可以是var name)；連續型:geom_histogram()、y = after_stat(density) 或 geom_density())
+#(3) 類別型 但柱子高度一樣: geom_bar(position = "fill")  # y 軸會自動變成 0 到 1 的比例
+#柱子高度不同: (position =  "stack") => 預設
+
+# prop好麻煩。之後用count就好了:上面都不用看了
+# 這樣寫最直覺，完全不用背 prop 和 group
+ggplot(diamonds, aes(x = color, fill = cut)) + 
+  geom_bar() # 預設就是 position = "stack"，柱子高低本來就不同！
+#呃 好像還是會用到prop吧 有時候數量落差太大 一部份會太貼Y軸
 
 # 10.5.3.1 Exercises ------------------------------------------------------
+'cut_width(conti_var, width) vs cut_number(conti_var, m)'
+#每個區間的寬度固定 / 每個區間的資料筆數固定
 
+'以 Price 切分，視覺化 Carat 的分佈'
+library(tidyverse)
+#prop
+ggplot(diamonds, aes(x = carat, y = after_stat(density), color = cut_width(price, 2500))) +
+  geom_freqpoly(binwidth = 0.1) +
+  labs(color = "Price Range")
+#count
+ggplot(diamonds, aes(x = carat, color = cut_width(price, 2500))) +
+  geom_freqpoly(binwidth = 0.1) +
+  labs(color = "Price Range")
 
+'大鑽石與小鑽石的價格分佈對比'  '分佈對比!'
+# 用 cut_number 將克拉分為 5 組，對比小鑽石（第 1 組）與大鑽石（第 5 組）的價格分佈
+ggplot(diamonds, aes(x = price, y = after_stat(density), color = cut_number(carat, 5))) +
+  geom_freqpoly(binwidth = 500) +
+  labs(color = "Carat Quintiles")  +
+  guides(color = guide_legend(reverse = TRUE)) # 這行就是你要的「顛倒」開關！
 
+'克拉區間與價格之間的關係'  '之間的關係'
+ggplot(diamonds, aes(x = cut_number(carat, 5), y = price)) +
+  geom_boxplot() +
+  labs(x = "Carat Quintiles") +
+  # 在箱型圖上疊加各組的平均值點（設定為紅色、放大、形狀為鑽石形）
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "red") 
+  
+'同時使用連續變數區間化（Binning）與面版分組（Faceting）'
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_bin2d() + # 1. 使用二維直方圖避免點重疊
+  scale_fill_viridis_c() +  #用顏色代表密度
+  facet_wrap(~ cut) + # 2. 用面版分組（Facet）拆開不同的切工（Cut）
+  labs(title = "Combined Distribution of Carat, Price, and Cut")
 
+'Why is a scatterplot a better display than a binned plot for outliers?'
+diamonds |> 
+  filter(x >= 4) |> 
+  ggplot(aes(x = x, y = y)) +
+  geom_point() +
+  coord_cartesian(xlim = c(4, 11), ylim = c(4, 11))
+'Scatterplot（散佈圖）會畫出「每一個獨立的原始點」'
 
+# 10.6 Patterns and models ------------------------------------------------
 
+#補充across用法: summarise/mutate(across(【怎麼選欄位】, 【要做什麼事】))
+'下面暫時裝不好'
+install.packages('tidymodels')
+library(tidymodels)
+
+# 課本 用tidymodels取對數 ------------------------------------------------------------------
+
+diamonds <- diamonds |>
+  mutate(
+    log_price = log(price),
+    log_carat = log(carat)  #克拉對價格的影響力太強了。取對數（Log transform，為了解決非線性或偏態問題）
+  )
+
+diamonds_fit <- linear_reg() |>
+  fit(log_price ~ log_carat, data = diamonds)
+
+diamonds_aug <- augment(diamonds_fit, new_data = diamonds) |> #把預測結果貼回原本的資料集。它會產生一個欄位叫 .resid（殘差）
+  mutate(.resid = exp(.resid))  #指數化還原
+
+ggplot(diamonds_aug, aes(x = carat, y = .resid)) + 
+  geom_point()
+
+'lm版本'
+# 用內建 R 寫法 取對數 ------------------------------------------------------------
+
+diamonds_base <- diamonds |> mutate(log_price = log(price), log_carat = log(carat))
+fit <- lm(log_price ~ log_carat, data = diamonds_base)
+
+# 直接把殘差取 exp 放回去
+diamonds_base$.resid <- exp(residuals(fit))
+
+# 用 ggplot 畫圖
+ggplot(diamonds_base, aes(x = carat, y = .resid)) +
+ geom_point(alpha = 0.2) +  # 畫出殘差的散點
+  # 加上一條 Y = 1 的水平基準線（因為 exp 之後，完美預測的值會接近 1，而不是 0）
+  # 如果是看未經 exp 的原始對數殘差，基準線就會是 geom_hline(yintercept = 0)
+  geom_hline(yintercept = 1, color = "red", linetype = "dashed", size = 1) +
+  geom_smooth(method = "loess", color = "blue", se = FALSE) +  # 加上一條平滑線，幫助我們肉眼看出殘差是否還殘留「彎曲的趨勢」
+  labs(
+    title = "鑽石克拉 vs 價格模型之殘差圖",
+    x = "克拉數 (Carat)",
+    y = "還原後的殘差 (Exponentiated Residuals)",
+    subtitle = "藍色平滑線若接近水平，代表非線性關係已被 Log 轉換成功吸收" ) +
+  theme_minimal()
+
+plot(fit)
+
+# 如果不取對數(原本的 第一個fit)---------------------------------
+#raw data EDA (看:整為何要取對數) (?)
+'1'
+diamonds_base_1 <- diamonds |> select(price, carat)
+fit_1 <- lm(price ~ carat, data = diamonds_base_1)
+plot(fit_1)
+
+'2'
+ggplot(diamonds, aes(carat, price)) +
+  geom_point() +
+  geom_smooth(method = "loess",se = F)
+
+# 為什麼課本要提這一部份: --------------------------------------------------------------
+
+# Fair（差切工）的鑽石，平均價格竟然比 Ideal（完美切工）還要貴
+diamonds |>
+  select(price, cut) |>
+  group_by(cut) |>
+  summarise(mean_price = mean(price)) |>
+  ggplot(aes(x = cut, y = mean_price)) +
+  geom_col() 
+
+#洗乾淨之後
 
 
 
