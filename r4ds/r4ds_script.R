@@ -1056,7 +1056,329 @@ diamonds |>
   ggplot(aes(x = cut, y = mean_price)) +
   geom_col() 
 
-#洗乾淨之後
+#洗完之後，得到一張正確的boxplot(Y軸:新模型殘差，X軸:cut)
+  #(這題的殘差圖還是有問題，因為只洗掉大趨勢，克拉還是有殘留的心理學效應可以解釋(變數底下的非線性特徵)))
+
+# my note -----------------------------------------------------------------
+
+  #(修模型: 用使用加權最小平方法（WLS）或對 \(Y\) 進行 Box-Cox 轉換)(或是3個偷懶方法:1.不要改模型 用用 sandwich 套件去重新計算 \(p\)-value；2. 改用「無母數檢定（Non-parametric test）」: Kruskal-Wallis 等檢定。這些檢定完全不看殘差圖，只看數據的「排序（Rank）」。；3.隨機森林(不在乎那些假設 會直接跟你說哪個因子重要))
+#新模型的殘差對 \(X\) 畫圖，理論上要是水平帶狀平均散布分佈
+  #順序: 先建立model <- aov(), plot(model)，再shapiro.test(residuals(model)) 搭配 leveneTest(...) 確認P值顯著與否，最後summary(model) + TukeyHSD(model)：若剛剛的ANOVA有顯著，進行事後比較
+  #想看組別差異（ANOVA表）:用 aov() 或 anova(lm())。想看預估公式（迴歸係數): 用 summary(lm())
+    #以下補充怎麼寫不會有順序影響的anova寫法:     
+#-----## 1. 建立 lm 模型，並強制指定對比編碼為 contr.sum (效果編碼)
+model_lm <- lm(score ~ color * size * text, 
+               data = sim_data, 
+               contrasts = list(color = contr.sum, size = contr.sum, text = contr.sum))
+
+      # 2. 使用 car 套件的 Anova 函數，並指定 type = 3
+library(car)
+Anova(model_lm, type = 3)
+
+# 11  Communication -------------------------------------------------------
+
+library(tidyverse)
+library(scales)
+library(ggrepel)
+library(patchwork)
+
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = class)) +
+  geom_smooth(se = FALSE) +
+  labs(    # !
+    x = "Engine displacement (L)",   #軸
+    y = "Highway fuel economy (mpg)", 
+    color = "Car type",   # (legend?) 就是旁邊那個圖示的框框
+    title = "Fuel efficiency generally decreases with engine size",  #大標題
+    subtitle = "Two seaters (sports cars) are an exception because of their light weight",  #副標題
+    caption = "Data from fueleconomy.gov"  # 圖的最底部 右下，放資料來源
+  )
+
+
+df <- tibble(
+  x = 1:10,
+  y = cumsum(x^2))
+
+ggplot(df, aes(x, y)) +
+  geom_point() +
+  labs(x = quote(x[i]),
+       y = quote(sum(x[i] ^ 2, i == 1, n))) # 數學式 把"my labs"改成用quote(my equation)
+
+# 11.2.1 Exercises --------------------------------------------------------
+glimpse(mpg)
+mpg |>
+  ggplot(aes(x = cty, y = hwy, color = drv, shape = drv)) +
+  geom_point()+
+  labs(x = "City MPG", y = "Highway MPG", color = "type of drive train", shape = "type of drive train")
+
+# -- geom_text()-----------------------------------------------------------------------
+label_info <- mpg |>
+  group_by(drv) |>
+  arrange(desc(displ)) |>
+  slice_head(n = 1) |>
+  mutate(drive_type = case_when(  #new! case_when("原本的變數名稱"="對照到我要的新變數名稱")
+      drv == "f" ~ "front-wheel drive",  
+      drv == "r" ~ "rear-wheel drive",   #像map的概念
+      drv == "4" ~ "4-wheel drive"
+    )) |>
+  select(displ, hwy, drv, drive_type)
+label_info # class = tibble
+
+ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE) +
+  geom_text(data = label_info,  #geom_text(data, aes(x=. y=, label=我要加在圖上面的字被收在前面那個data的哪個col裡))
+            aes(x = displ, y = hwy, label = drive_type),
+            fontface = "bold", size = 5, hjust = "right", vjust = "bottom") +
+  theme(legend.position = "none")  # turns all the legends off 
+
+
+#  geom_label_repel() -----------------------------------------------------
+
+ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE) +
+  geom_label_repel(  #geom_label_repel(data, aes(x=, y=, label=同上geom_text))
+    data = label_info, 
+    aes(x = displ, y = hwy, label = drive_type),
+    fontface = "bold", size = 5, nudge_y = 2) +
+  theme(legend.position = "none")
+# 就是多一個打底框框 比較好看清楚字
+
+# geom_text_repel() -------------------------------------------------------
+potential_outliers <- mpg |>
+  filter(hwy > 40 | (hwy > 20 & displ > 5))
+
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point() + #全部的點
+  # ! geom_text_repel(data=我有要標的點是哪些, aes(label = model))
+  geom_text_repel(data = potential_outliers, aes(label = model)) +
+  geom_point(data = potential_outliers, color = "red") + #異常點 變成紅色
+  geom_point( #異常點 加上紅色環
+    data = potential_outliers,
+    color = "red", size = 3, shape = "circle open")
+
+
+# other geoms in ggplot2 to annotate plot ---------------------------------
+
+'add reference lines'
+geom_hline()
+geom_vline() #(linewidth = 2) and white (color = white)
+
+'draw a rectangle around points of interest'
+geom_rect() # aes: xmin, xmax, ymin, ymax
+
+'draw arrow'
+geom_segment(arrow = arrow(type = "closed")) #aesthetics x and y: 起始點、xend and yend: 結束處
+
+'annotate()'
+# ex:
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point() +
+  annotate(
+    geom = "label", x = 3.5, y = 38,
+    label = trend_text,
+    hjust = "left", color = "red"
+  ) +
+  annotate(
+    geom = "segment",
+    x = 3, y = 35, xend = 5, yend = 25, color = "red",
+    arrow = arrow(type = "closed"))
+
+# stringr::str_wrap()  ----------------------------------------------------
+
+trend_text <- "Larger engine sizes tend to have lower fuel economy." |>
+  str_wrap(width = 30)
+trend_text
+#自動幫很長的text 加上\n來換行
+
+# 11.4 Scales -------------------------------------------------------------
+ggplot(mpg, aes(x = displ, y = hwy)) + geom_point(aes(color = class)) +
+  scale_x_continuous() + # 以下3行是 Default scales
+  scale_y_continuous() +   #命名有邏輯! scale_對照的aes(裡面有提到過的)_它的資料型態
+  scale_color_discrete()
+# 可以加:
+'labels = NULL' #: 數字坐標軸  
+'labels = c("4" = "4-wheel", "f" = "front", "r" = "rear")'
+
+# 11.4.2 Axis ticks and legend keys ---------------------------------------
+ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
+  geom_point() +
+  scale_y_continuous(breaks = seq(15, 40, by = 5))  #調整Y軸的上下限、及每格級距
+
+# adds dollar sign, thousand separator comma
+ggplot(diamonds, aes(x = price, y = cut)) +
+  geom_boxplot(alpha = 0.05) +
+  scale_x_continuous(labels = label_dollar()) #labels = label_dollar()
+#也可以加K:
+'labels = label_dollar(scale = 1/1000, suffix = "K")'
+
+# 加%
+ggplot(diamonds, aes(x = cut, fill = clarity)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(name = "Percentage", labels = label_percent())
+'label_percent()'
+
+# breaks
+presidential |>
+  mutate(id = 33 + row_number()) |>
+  ggplot(aes(x = start, y = id)) +
+  geom_point() +
+  geom_segment(aes(xend = end, yend = id)) +
+  scale_x_date(name = NULL, breaks = presidential$start, date_labels = "'%y") #只顯示西元年份的後兩碼
+"name = NULL" # name是軸的名稱
+
+# 11.4.3 Legend layout ----------------------------------------------------
++ theme(legend.position = "right") # the default
+# 'top, bottom'
++ guides(color = guide_legend(nrow = 2, override.aes = list(size = 4)))
+
+# 11.4.4 Replacing a scale ------------------------------------------------
+# 直接改X、Y單位
+ggplot(diamonds, aes(x = log10(carat), y = log10(price))) +
+  geom_bin2d() #但這樣name(座標軸名稱)會被改的很難看
+
+# 所以:
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_bin2d() + 
+  scale_x_log10() +  # !
+  scale_y_log10()    # !
+
+
+# 用scale改顏色 ---------------------------------------------------------------
+
+# 最多只到12顏色限制的 category data
+'ColorBrewer scales'
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = drv)) +
+  scale_color_brewer(palette = "Set1") # 這個set紅綠色盲也看的清楚
+
+# 注意!  color: 點線(包括文字)； fill: 面
+
+# 沒有顏色數量上限的 category data #是需要自己手動指定顏色?
+'scale_color_manual()' 
+presidential |>
+  mutate(id = 33 + row_number()) |>
+  ggplot(aes(x = start, y = id, color = party)) +  #aes裡放分類的變數
+  geom_point() +
+  geom_segment(aes(xend = end, yend = id)) +
+  scale_color_manual(values = c(Republican = "#E81B23", Democratic = "#00AEF3")) #給定value=(顏色對照清單)
+
+'scale_color_gradient()' #gradient: 漸層
+#(low = "顏色1", high = "顏色2")
+'scale_fill_gradient()'
+
+'scale_color_gradient2()' #三色: 適用於資料有一個明確的中間值/零點
+#(low, mid, high)
+
+# viridis color scales (viridis也沒有顏色上限、有內建色系 不用手動指定色號)----------------------------------------------------
+df <- tibble(x = rnorm(10000),
+             y = rnorm(10000)) #rnorm(要隨機抽幾個)
+# 
+ggplot(df, aes(x, y)) +
+  geom_hex() +
+  coord_fixed() + #產生的線為45 度/確保1個 X 單位和1個 Y 單位在螢幕上佔據相同的長度
+  labs(title = "Default, continuous", x = NULL, y = NULL)
+
+ggplot(df, aes(x, y)) +
+  geom_hex() +
+  coord_fixed() +
+  scale_fill_viridis_c() +  # c = continuos
+  labs(title = "Viridis, continuous", x = NULL, y = NULL)
+
+ggplot(df, aes(x, y)) +
+  geom_hex() +
+  coord_fixed() +
+  scale_fill_viridis_b() +  # b = binned
+  labs(title = "Viridis, binned", x = NULL, y = NULL)
+#補充: d = discrete
+
+# 11.4.5 Zooming ----------------------------------------------------------
+
+mpg |>
+  filter(displ >= 5 & displ <= 6 & hwy >= 10 & hwy <= 25) |> #!
+  ggplot(aes(x = displ, y = hwy)) +
+  geom_point(aes(color = drv)) +
+  geom_smooth()
+
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(aes(color = drv)) +
+  geom_smooth() +
+  scale_x_continuous(limits = c(5, 6)) + #!
+  scale_y_continuous(limits = c(10, 25)) #!
+# 以上兩個圖的結果一樣
+
+'多張圖表如何共用相同尺度（Scales）'
+# 統一的X軸、Y軸、顏色範圍
+x_scale <- scale_x_continuous(limits = range(mpg$displ)) #range(): 得到最大與最小值
+y_scale <- scale_y_continuous(limits = range(mpg$hwy))
+col_scale <- scale_color_discrete(limits = unique(mpg$drv)) #unique() 會挑選出資料中所有不重複的類別（結果為 "f", "r", "4"），這樣顏色才不會因為缺乏某個車種 系統自動給色 顏色跑掉 每張圖不一致
+
+# 第一張
+ggplot(suv, aes(x = displ, y = hwy, color = drv)) +
+  geom_point() +
+  x_scale +
+  y_scale +
+  col_scale
+
+# 第二張
+ggplot(compact, aes(x = displ, y = hwy, color = drv)) +
+  geom_point() +
+  x_scale +
+  y_scale +
+  col_scale
+
+# 11.4.6 Exercises --------------------------------------------------------
+
+'scale vs labs'
+# 前者: 想改數據呈現(breaks, labels, limits, trans)
+# 後者: 只想改文字
+
+
+# Q3 -----------------------------------------------------------------------
+# 4 年一個斷點的設定
+year_breaks <- seq(1952, 2026, by = 4) |> paste0("-01-01") |> as.Date()
+
+ggplot(presidential, aes(x = start, y = name, color = party)) +
+  # 1. 這裡把 yend 也換成 name，用總統名字當作 Y 軸
+  geom_segment(aes(xend = end, yend = name), linewidth = 2) +
+  # 2. 標註名字（直接用現有的 name 欄位，調整一下文字位置）
+  geom_text(aes(label = name), hjust = -0.1, vjust = -0.4, size = 3, show.legend = FALSE) +
+  # 3. 自訂顏色與每 4 年的 X 軸斷點
+  scale_color_manual(values = c("Democratic" = "#1405BD", "Republican" = "#DE0100")) +
+  scale_x_date(
+    breaks = year_breaks,
+    date_labels = "%Y",
+    expand = expansion(mult = c(0.05, 0.15)) # 擴展右側避免名字被切掉
+  ) +
+  # 4. 優化 Y 軸：依照時間先後順序排列（原本預設會按字母排，這會亂掉）
+  scale_y_discrete(limits = presidential$name) +
+  # 5. 加上圖表標籤
+  labs(
+    title = "US Presidential Terms & Party Affiliation",
+    subtitle = "From Eisenhower to Trump",
+    x = "Year",
+    y = NULL,
+    color = "Party"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#  Q4 -----------------------------------------------------------------------
+ggplot(diamonds, aes(x = carat, y = price)) +
+  geom_point(aes(color = cut), alpha = 1/20) +
+  # 使用 override.aes 強制讓圖例的點保持清晰不透明
+  guides(color = guide_legend(override.aes = list(alpha = 1))) +
+  theme_minimal()
+
+
+# 11.5 Themes -------------------------------------------------------------
+#ggthemes
++ theme_bw()
+
+
+
+
 
 
 
