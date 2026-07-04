@@ -1375,7 +1375,71 @@ ggplot(diamonds, aes(x = carat, y = price)) +
 # 11.5 Themes -------------------------------------------------------------
 #ggthemes
 + theme_bw()
++ theme_minimal()
 
+# example
+ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
+  geom_point() +
+  labs(
+    title = "Larger engine sizes tend to have lower fuel economy",
+    caption = "Source: https://fueleconomy.gov."
+  ) +
+  theme(  # ! 以下
+    legend.position = c(0.6, 0.7),
+    legend.direction = "horizontal",
+    legend.box.background = element_rect(color = "black"), #除了color,還有fill,linewidth,linetype
+    plot.title = element_text(face = "bold"), #除了face, 還有size, color
+    plot.title.position = "plot",    # title跟"plot"對齊 (預設是跟panel畫圖區對齊)
+    plot.caption.position = "plot",  # .position : caption 以誰(plot or panel)為基準定位
+    plot.caption = element_text(hjust = 0)) #水平對齊=0 => 左對齊
+# element_text() = 在改字體樣式
+
+ggplot(diamonds, aes(x = log10(carat), y = log10(price))) +
+  geom_bin2d() +
+  labs(x = "log10(carat)")+
+  theme(axis.title.x = element_text(face = "bold", color = "blue"))
+#補充: 
+axis.title.x  #Y
+axis.text.x   #Y   # text : 刻度
+legend.title
+legend.text
+
+# 11.6 Layout -------------------------------------------------------------
+
+#(1) 直接兩張圖相加 : plot1 + plot2
+#(2) patchwork package: 
+plot3 <- ggplot(mpg, aes(x = cty, y = hwy)) + 
+  geom_point() + 
+  labs(title = "Plot 3")
+# !
+(plot1 | plot3) / plot2   # | : places plots next to each other 
+                          # / : moves plots to the next line
+
+# (3) guide_area()
+p1 <- ggplot(mpg, aes(x = drv, y = cty, color = drv)) + 
+  geom_boxplot(show.legend = FALSE) + 
+  labs(title = "Plot 1")
+p2 <- ggplot(mpg, aes(x = drv, y = hwy, color = drv)) + 
+  geom_boxplot(show.legend = FALSE) + 
+  labs(title = "Plot 2")
+p3 <- ggplot(mpg, aes(x = cty, color = drv, fill = drv)) + 
+  geom_density(alpha = 0.5) + 
+  labs(title = "Plot 3")
+p4 <- ggplot(mpg, aes(x = hwy, color = drv, fill = drv)) + 
+  geom_density(alpha = 0.5) + 
+  labs(title = "Plot 4")
+p5 <- ggplot(mpg, aes(x = cty, y = hwy, color = drv)) + 
+  geom_point(show.legend = FALSE) + 
+  facet_wrap(~drv) +
+  labs(title = "Plot 5")
+
+# !
+(guide_area() / (p1 + p2) / (p3 + p4) / p5) +
+  plot_annotation(title = "City and highway mileage for cars with different drive trains",
+                  caption = "Source: https://fueleconomy.gov.") +
+  plot_layout(guides = "collect",
+              heights = c(1, 3, 2, 4)) &  #???不懂那個1是啥。 # height of 1, the box plots 3, density plots 2, and the faceted scatterplot 4
+  theme(legend.position = "top")      #用& 因為we’re modifying the theme for the patchwork plot as opposed to the individual ggplots
 
 
 
