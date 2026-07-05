@@ -1195,11 +1195,11 @@ trend_text
 # 11.4 Scales -------------------------------------------------------------
 ggplot(mpg, aes(x = displ, y = hwy)) + geom_point(aes(color = class)) +
   scale_x_continuous() + # 以下3行是 Default scales
-  scale_y_continuous() +   #命名有邏輯! scale_對照的aes(裡面有提到過的)_它的資料型態
+  scale_y_continuous() +   # 命名有邏輯! scale_對照的aes(裡面有提到過的)_它的資料型態
   scale_color_discrete()
 # 可以加:
 'labels = NULL' #: 數字坐標軸  
-'labels = c("4" = "4-wheel", "f" = "front", "r" = "rear")'
+'labels = c("4" = "4-wheel", "f" = "front", "r" = "rear")' #替換 map
 
 # 11.4.2 Axis ticks and legend keys ---------------------------------------
 ggplot(mpg, aes(x = displ, y = hwy, color = drv)) +
@@ -1255,6 +1255,8 @@ ggplot(mpg, aes(x = displ, y = hwy)) +
 
 # 注意!  color: 點線(包括文字)； fill: 面
 
+# -------------------------------------------------------------------------
+
 # 沒有顏色數量上限的 category data #是需要自己手動指定顏色?
 'scale_color_manual()' 
 presidential |>
@@ -1270,6 +1272,8 @@ presidential |>
 
 'scale_color_gradient2()' #三色: 適用於資料有一個明確的中間值/零點
 #(low, mid, high)
+
+# -------------------------------------------------------------------------
 
 # viridis color scales (viridis也沒有顏色上限、有內建色系 不用手動指定色號)----------------------------------------------------
 df <- tibble(x = rnorm(10000),
@@ -1440,6 +1444,160 @@ p5 <- ggplot(mpg, aes(x = cty, y = hwy, color = drv)) +
   plot_layout(guides = "collect",
               heights = c(1, 3, 2, 4)) &  #???不懂那個1是啥。 # height of 1, the box plots 3, density plots 2, and the faceted scatterplot 4
   theme(legend.position = "top")      #用& 因為we’re modifying the theme for the patchwork plot as opposed to the individual ggplots
+
+# 11.6.1 Exercises --------------------------------------------------------
+p1 <- ggplot(mpg, aes(x = displ, y = hwy)) + 
+  geom_point() + 
+  labs(title = "Plot 1")
+p2 <- ggplot(mpg, aes(x = drv, y = hwy)) + 
+  geom_boxplot() + 
+  labs(title = "Plot 2")
+p3 <- ggplot(mpg, aes(x = cty, y = hwy)) + 
+  geom_point() + 
+  labs(title = "Plot 3")
+
+(p1 | p2) / p3
+p1 | p2 / p3
+p1 / (p2 | p3)
+
+# 12  Logical vectors -----------------------------------------------------
+library(tidyverse)
+library(nycflights13)
+
+# review:
+flights |> 
+  mutate(daytime = dep_time > 600 & dep_time < 2000,
+         approx_ontime = abs(arr_delay) < 20,
+        .keep = "used")  # 只留下上面有用到的
+
+flights |> 
+  mutate(daytime = dep_time > 600 & dep_time < 2000,
+         approx_ontime = abs(arr_delay) < 20,) |> 
+  filter(daytime & approx_ontime)
+
+# -------------------------------------------------------------------------
+
+x <- c(1 / 49 * 49, sqrt(2) ^ 2)
+
+x == as.integer(c(1, 2))  # X ； 有看到/、sqrt、log => 一律不要用==，用near!
+near(x, c(1, 2))          # O ； dplyr::near()會容忍誤差地去對照比較
+# 不能用==比是因為Na, NaN都像是問號一樣的存在，丟到==裡只會得到一樣是問號(不知道)；
+# 但Inf就不一樣了，無限是確定的，所以可以用==，也可以用is.infinite(x)
+
+# -------------------------------------------------------------------------
+
+#is.na(var_name) 產生T、F(0、1)
+flights |> 
+  filter(month == 1, day == 1) |> 
+  arrange(desc(is.na(dep_time)), dep_time)  # arrange(多個var name) => 第一順位和第二順位(若第一順位同分，會用到)
+
+# 12.2.4 Exercises --------------------------------------------------------
+
+# Q1:
+near(sqrt(2)^2, 2)
+
+# Q2: how the missing values in dep_time, sched_dep_time and dep_delay are connected
+flights %>%
+  mutate(na_dep_time       = is.na(dep_time),  # 新增都是T或F的新欄位
+         na_sched_dep_time = is.na(sched_dep_time),
+         na_dep_delay      = is.na(dep_delay)) %>%
+  count(na_dep_time, na_sched_dep_time, na_dep_delay) # count()會計算distinct組合的數量
+  #我自己的
+flights |>
+  select(dep_time,  dep_delay) |>
+  filter(is.na(dep_time) | is.na(dep_delay)) |>
+  distinct()
+
+# 12.3 Boolean algebra ----------------------------------------------------
+xor(x, y)  # 不是x 也不是y
+# 12.3.1 Missing values ---------------------------------------------------
+df <- tibble(x = c(TRUE, FALSE, NA)) #x 本身就已經是「判斷完的結果」了/X已經用is.家族得到TF了
+
+df |> 
+  mutate(and = x & NA,
+         or = x | NA)
+
+# 12.3.3 %in%  ------------------------------------------------------------
+
+#大 %in% 小，看大的有沒有小的的值(NA也可以看)，輸出T F
+letters[1:10] %in% c("a", "e", "i", "o", "u")
+
+# 12.3.4 Exercises --------------------------------------------------------
+
+#Q1 -------------------------------------------------
+'arr_delay is missing but dep_delay is not. '
+flights |>
+  filter(is.na(arr_delay) & !is.na(dep_delay)) |>
+  relocate(arr_delay, dep_delay)
+
+'neither arr_time nor sched_arr_time are missing, but arr_delay is.'
+flights |>
+  filter(!is.na(arr_time) & !is.na(sched_arr_time) & is.na(arr_delay)) |>
+  relocate(arr_time, sched_arr_time, arr_delay)
+#Q2 -------------------------------------------------
+
+# mine ans
+'How many flights have a missing dep_time? '
+flights %>%
+  select(dep_time) %>%
+  mutate(na_dep_time = is.na(dep_time)) %>%
+  filter(na_dep_time %in% TRUE) %>%
+  summarise(n_mis = n())
+
+# faster
+flights %>%
+  summarise(n_missing = sum(is.na(dep_time)))
+
+'What other variables are missing in these rows?'
+# mine
+flights %>%
+  mutate(na_dep_time = is.na(dep_time)) %>%
+  filter(na_dep_time %in% TRUE) %>%
+  relocate(dep_time) 
+
+# 補充:
+select(data, where(~ any(is.na(.x)) #任何有NA的col都選
+select(data, where(~ mean(.x, na.rm = TRUE) > 10)) 
+# .x: 對all col做迴圈，控制每次照順序坐下去 一次鎖定一個col. 
+# 後面接的這些類型的函數 例如 mean()、sum()、length()、any()、all()...: 對這一整欄的所有數值進行計算
+# ~: 匿名函數，代表後面是一個函數條件
+
+# 正解:
+# 篩選出出發時間遺失的整張表，並查看每個欄位的摘要
+flights %>%
+  filter(is.na(dep_time)) %>%
+  summary()
+
+# Q3 ---------------------------------------------
+
+'number of missing dep_time per day?' 
+# !只要題目出現「每」或「各」，就用 group_by
+
+'pattern、connection between the proportion of cancelled flights and the average delay of non-cancelled flights?'
+
+cancelled_delay_data <- flights %>%
+  group_by(year, month, day) %>% 
+  summarise(total_flights = n(), # 每天總航班數
+            n_cancelled = sum(is.na(dep_time)), # 每天取消的航班數（dep_time 是 NA）
+            prop_cancelled = mean(is.na(dep_time)), # 取消航班的比例
+            avg_delay_non_cancelled = mean(dep_delay, na.rm = TRUE),   # 未取消航班（dep_time 不是 NA）的平均出發延誤時間
+            .groups = "drop") %>%
+  relocate(avg_delay_non_cancelled,prop_cancelled)
+
+ggplot(cancelled_delay_data, aes(x = avg_delay_non_cancelled, y = prop_cancelled)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(
+    x = "未取消航班的平均延誤時間 (分鐘)",
+    y = "航班取消比例",
+    title = "航班取消比例與平均延誤時間的關係")
+
+# 12.4 Summaries ----------------------------------------------------------
+
+
+
+
+
 
 
 
