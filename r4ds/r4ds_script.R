@@ -1579,7 +1579,7 @@ cancelled_delay_data <- flights %>%
   group_by(year, month, day) %>% 
   summarise(total_flights = n(), # 每天總航班數
             n_cancelled = sum(is.na(dep_time)), # 每天取消的航班數（dep_time 是 NA）
-            prop_cancelled = mean(is.na(dep_time)), # 取消航班的比例
+            prop_cancelled = mean(is.na(dep_time)), # 取消航班的比例。 !看到proportion, 想到mean()
             avg_delay_non_cancelled = mean(dep_delay, na.rm = TRUE),   # 未取消航班（dep_time 不是 NA）的平均出發延誤時間
             .groups = "drop") %>%
   relocate(avg_delay_non_cancelled,prop_cancelled)
@@ -1592,8 +1592,175 @@ ggplot(cancelled_delay_data, aes(x = avg_delay_non_cancelled, y = prop_cancelled
     y = "航班取消比例",
     title = "航班取消比例與平均延誤時間的關係")
 
-# 12.4 Summaries ----------------------------------------------------------
+# ----------------------------------------------------------
 
+flights |> 
+  group_by(year, month, day) |> 
+  summarize(
+    behind = mean(arr_delay[arr_delay > 0], na.rm = TRUE), # 或是要在前面用 filter(arr_delay > 0)
+    ahead = mean(arr_delay[arr_delay < 0], na.rm = TRUE),
+    n = n(),
+    .groups = "drop" )
+
+# 12.4.4 Exercises --------------------------------------------------------
+
+prod()
+# 向量內所有元素的乘積 => 只要向量裡有F，prod就是0
+# 在概念上等價於 all()，但all()是回傳邏輯值(F/T)
+# 跟min()就是完全相等了
+
+# 12.5 Conditional transformations ----------------------------------------
+'if_else()'
+# 自訂我要回傳的/執行的動作 #優點:可以自定義NA怎麼處理(用 missing = "沒有值")
+if_else(my_condition, if T then do what, if F ..., if NA ...)
+
+'case_when()'
+# condition ~ output； condition must be a logical vector
+x <- c(-3:3, NA)
+case_when(
+  x == 0   ~ "0",
+  x < 0    ~ "-ve", 
+  x > 0    ~ "+ve",
+  is.na(x) ~ "???")
+# .default = "???" (是不是在處理剩下其他的?)
+
+flights |> 
+  mutate(status = 
+    case_when(is.na(arr_delay)      ~ "cancelled",
+              arr_delay < -30       ~ "very early",
+              arr_delay < -15       ~ "early",
+              abs(arr_delay) <= 15  ~ "on time",
+              arr_delay < 60        ~ "late",
+              arr_delay < Inf       ~ "very late",), # < Inf (蛤?)
+  .keep = "used") # 新增完欄位，選擇要留下來哪些
+
+# 12.5.4 Exercises --------------------------------------------------------
+#Q1
+'whether each number between 0 and 20 is even or odd'
+if_else(1:20 %% 2 == 0, "even", "odd")
+
+#Q2
+'Given a vector of days, use an if_else() label them as weekends or weekdays.'
+
+s <- c("Monday", "Saturday", "Wednesday")
+case_when(s == "Monday" ~ 1,  #嚴格規定 輸出的型態要一致!
+          s == "Tuesday" ~ 2,
+          s == "Wednesday" ~ 3,
+          s == "Thursday" ~ 4,
+          s == "Friday" ~ 5,
+          s == "Saturday" ~ 6,
+          s == "Sunday" ~ 7,
+          TRUE ~ NA_real_) #如果.default因為版本太舊不能跑 就改成TRUE
+s <- 1:7
+if_else(s > 5, 'weekends', 'weekdays')
+
+# 其他作法:
+weekdays_list <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+match(s, weekdays_list) # match 會回傳 s 在 weekdays_list 裡面的第幾個位置（也就是 1 到 7）
+
+#Q3
+'compute the absolute value of a numeric vector called x'
+
+input <- readline(prompt = "enter number（用空格隔開）:")
+
+# strsplit(input, split): 用空格將字串切割成文字向量
+input_split <- unlist(strsplit(input, split = " ")) # unlist(): 降維成標準向量
+
+num_vector <- as.numeric(input_split)
+class(num_vector) #numeric (vector)
+#------
+num_vector <- as.numeric(unlist(c(-5, 9, -13)))
+ifelse(num_vector < 0, -1 * num_vector, num_vector)
+
+#Q4
+'Write a case_when() statement that uses the month and day columns from flights to label a selection of important US holidays (e.g., New Years Day, 4th of July, Thanksgiving, and Christmas). First create a logical column that is either TRUE or FALSE, and then create a character column that either gives the name of the holiday or is NA.'
+#my sol----------------------------------
+holiday_map <- c("11" = "New Year's Day",
+                 "74" = "4th of July",
+                 "1128" = "Thanksgiving",
+                 "1225" = "Christmas")
+names(holiday_map)
+
+date <- flights |>
+  #group_by(month, day) #用 paste0 組合時，可以不用 group_by，直接用欄位即可
+  mutate(my_date = paste0(month, day)) |>
+  mutate(is_it_holiday = my_date %in% names(holiday_map)) |>
+  mutate('name of the holiday' = holiday_map[my_date]) |> #欄位名稱有空格的話要用引號包起來 不然就要注意用_連接好
+  relocate('name of the holiday', is_it_holiday) 
+# 因為我在map裡有定義好了 所以不用用map 用holiday_map[my_date]就可以了  
+date
+
+# 正解------------------------------------
+# 必須連同 flights 和 mutate 一起執行
+flights_with_holiday <- flights %>%
+  mutate(
+    holiday_name = case_when(
+      month == 1  & day == 1  ~ "New Year's Day",
+      month == 7  & day == 4  ~ "4th of July",
+      month == 11 & day == 28 ~ "Thanksgiving",
+      month == 12 & day == 25 ~ "Christmas",
+      TRUE                    ~ NA_character_))  
+# 篩選 12 月 25 日的資料，看看 holiday_name 欄位
+flights_with_holiday %>%
+  filter(month == 12, day == 25) %>%
+  select(month, day, holiday_name) %>%
+  head()
+
+# 補充: 用 match ---------------------------
+
+# 定義兩個分開的向量
+holiday_dates <- c("11", "74", "1128", "1225")
+holiday_names <- c("New Year's Day", "4th of July", "Thanksgiving", "Christmas")
+
+date <- flights |>
+  mutate(my_date = paste0(month, day)) |>
+  # match 會回傳位置數字（例如 1, 2, 3, 4），找不到就回傳 NA
+  mutate(pos = match(my_date, holiday_dates)) |>
+  mutate(is_it_holiday = !is.na(pos)) |>
+  mutate(`name of the holiday` = holiday_names[pos])
+
+# 13  Numbers -------------------------------------------------------------
+
+# parsing strings into numbers
+parse_number() #只取裡面的數字，不管其他不是數字的字串跟符號
+parse_double() #換算成數值
+
+# 比較count()和n()-------------------------------------------------------------------------
+
+flights |> 
+  count(dest, sort = TRUE)   # 在外面；最頻繁的在上面
+flights |>  
+  group_by(dest) |> 
+  summarize(n = n())  # 在裡面，屬於summary function
+
+# n_distinct() ---------------------------------------
+flights |> 
+  group_by(dest) |>  #試著加#跑跑看 很好玩
+  summarize(carriers = n_distinct(carrier)) |> 
+  arrange(desc(carriers))  
+
+# summarize(sum函數+is.na()) => number of_
+
+# 13.3.1 Exercises --------------------------------------------------------
+'number of rows with a missing value'
+flights |>
+  filter(is.na(dep_time)) |>
+  summarize(n = n())
+
+# pmin()、pmax() -----------------------------------------------------------
+df <- tribble(
+  ~x, ~y,
+  1,  3,
+  5,  2,
+  7, NA,)
+
+df |> 
+  mutate(min = pmin(x, y, na.rm = TRUE), #pmin(all var name, na.rm = T)
+         max = pmax(x, y, na.rm = TRUE) )  
+
+# round() ----------------------------------------------------------
+round(123.456, -1)  #去零頭
+#default = 0, 意思是取到整數
 
 
 
