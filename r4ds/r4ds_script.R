@@ -1761,13 +1761,212 @@ df |>
 # round() ----------------------------------------------------------
 round(123.456, -1)  #去零頭
 #default = 0, 意思是取到整數
+round(x / 4) * 4  #四捨五入 以4為最小單位
 
+#floor/ceiling: round down/up
+# cut ---------------------------------------------------------------------
+x <- c(1, 2, 5, 10, 15, 20)
+cut(x, breaks = c(0, 5, 10, 100)) # x是一個數值向量，我給定breaks作為標準，cut會看X對照到我標準的哪個區間裡
 
+cut(x, breaks = c(0, 5, 10, 15, 20), 
+       labels = c("sm", "md", "lg", "xl"))  # 讓輸出值不是我給定的breaks,而是用labels來表示
+# 超出我給的範圍的話就顯示NA
 
+# cum_()系列 ----------------------------------------------------------------
+x <- 1:10
+cumsum(x) # 1,1+2,1+2+3,1+2+3+4,......
+# 還有cummean, cummax, cumprod
 
+# Ranks -------------------------------------------------------------------
+x <- c(1, 5, 5, 17, 22, NA)
+min_rank(x) # 排名大小順序(數字越小 名次越前面) #加上desc(x)就是順序反過來
 
+# 更多:
+row_number() #第幾列
+dense_rank() #跟min_rank差在哪??
+percent_rank() #百分位數的排名(all=1) 
+cume_dist() #累計的百分位數排名
 
+# 範例:
+df <- tibble(id = 1:10)
 
+df |> 
+  mutate(
+    row0 = row_number() - 1,
+    three_groups = row0 %% 3,  #分三組 給予組別
+    three_in_each_group = row0 %/% 3)  #每組拿到相同值
+
+# 13.5.2 Offsets ----------------------------------------------------------
+x <- c(2, 5, 11, 11, 19, 35)
+lag(x) #每次讀的時候 讓X lag => 第一次讀到沒東西 => NA
+lead(x) #X lead => 提前一個位置 => 讀到第二個位置的
+
+#範例:
+events |> mutate(
+  group = cumsum(has_gap))
+
+# creating grouping variables ---------------------------------------------
+'group_by(x)' #只要內容物一樣 就分成同組 
+'consecutive_id(x)' #不管這個內容物之前有沒有出現過 只要前後內容物不一樣 就幫新的內容物開一個新的組別
+                    #用於:有時間先後順序、且狀態會反覆跳轉」的資料
+#舉例
+df <- tibble(
+  x = c("a", "a", "a", "b", "c", "c", "d", "e", "a", "a", "b", "b"),
+  y = c(1, 2, 3, 2, 4, 1, 3, 9, 4, 8, 10, 199)
+)
+df |> 
+  group_by(id = consecutive_id(x)) |> 
+  slice_head(n = 1) #抓取每個群組的第一列 / 抓取正常跟異常那個改變的時間點
+
+# 13.5.4 Exercises --------------------------------------------------------
+#Q1
+'Find the 10 most delayed flights using a ranking function.'
+library(nycflights13)
+glimpse(flights)
+# 不用min_rank的話
+flights |>
+  arrange(desc(dep_delay)) |>
+  relocate(dep_delay, flight) |> 
+  slice_head(n = 10)
+#用
+flights |>
+  mutate(most_delayed = min_rank(-dep_delay)) |> #如果要反序，就是在變數名稱前面加上負號
+  arrange(most_delayed) |>
+  relocate(flight, dep_delay, most_delayed) |> 
+  filter(most_delayed <= 10)
+
+#Q2  
+'Which plane (tailnum) has the worst on-time record?'
+'這架飛機平均每次起飛，延誤多久?'
+flights |>
+  filter(!is.na(tailnum)) |> #加上去
+  group_by(tailnum) |>
+  summarize(mean_dep_delay = mean(dep_delay, na.rm = TRUE), #加上去
+            n = n()) |> #看看是不是極少狀況
+  arrange(desc(mean_dep_delay)) |>
+  relocate(mean_dep_delay, tailnum)
+
+#Q3
+'What time of day should you fly if you want to avoid delays as much as possible?'
+#用時間(每天的 24小時分鐘)當X軸；delay時間當Y軸，畫圖
+
+#Q4
+flights |> 
+  group_by(dest) |> 
+  filter(row_number(dep_delay) < 4) #把每個dest裡 dep_delay前三名抓出來
+
+#Q5
+'For each destination, compute the total minutes of delay.'
+flights |>
+  filter(!is.na(dep_delay) | !is.na(arr_delay)) |>
+  group_by(dest) |>
+  summarize(total_minutes_of_delay = sum(dep_delay - arr_delay, na.rm = T),
+            n = n()) |>
+  relocate(dest, total_minutes_of_delay, n) |>
+  arrange(total_minutes_of_delay)
+
+' For each flight, compute the proportion of the total delay for its destination'
+# mine
+flights |>
+  filter(!is.na(dep_delay), !is.na(arr_delay)) |>
+  mutate(delay_diff = dep_delay - arr_delay) |>
+  group_by(dest) |>
+  mutate(n = n(),
+         total_diff = sum(delay_diff, na.rm = TRUE),
+         prop_delay_for_its_dest = delay_diff/ total_diff) |>
+  ungroup() |>
+  relocate(dest, prop_delay_for_its_dest, n) |>
+  arrange(prop_delay_for_its_dest)
+
+# 怎麼不一樣阿
+flights |>
+  filter(!is.na(dep_delay) & !is.na(arr_delay)) |>
+  group_by(dest) |>
+  # 因為接的是 mutate，所以它會為「每一列」保留原本的 dep_delay 和 arr_delay，
+  # 同時，裡面的 n() 會非常聰明地自動代表「該目的地的總航班數」！
+  mutate(prop_delay_for_its_dest = (dep_delay - arr_delay) / n() ) |>
+  ungroup() |>
+  relocate(dest, prop_delay_for_its_dest) |>
+  arrange(prop_delay_for_its_dest)
+
+#Q6
+"Using lag(), explore how the average flight delay for an hour is related to the average delay for the previous hour."
+flights |> 
+  mutate(hour = dep_time %/% 100) |> 
+  group_by(year, month, day, hour) |> 
+  summarize(
+    dep_delay = mean(dep_delay, na.rm = TRUE),
+    n = n(),
+    .groups = "drop") |> 
+  filter(n > 5) |> #以下
+  filter(hour - lag(hour) == 1) |> #lag() 抓到的「前一列」不一定真的是「前一小時」,可能中間跳過去了
+  group_by(year, month, day) |>          # 按「天」重新分組
+  mutate(lag_dep_delay = lag(dep_delay)) |> 
+  ungroup() |> 
+  filter(!is.na(lag_dep_delay)) |> 
+  ggplot(aes(x = lag_dep_delay, y = dep_delay)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE)
+
+#Q7
+'find flights that are suspiciously fast (i.e. flights that represent a potential data entry error)/Compute the air time of a flight relative to the shortest flight to that destination' 
+flights |>
+  filter(!is.na(air_time)) |>
+  group_by(dest) |>
+  mutate(
+    min_air_time = min(air_time),
+    med_air_time = median(air_time), #真正該懷疑的是「跟這個目的地的一般水準(中位數)差很多」的航班
+    rel_to_min = air_time / min_air_time,
+    rel_to_med = air_time / med_air_time
+  ) |>
+  ungroup() -> air_time_check
+
+air_time_check |>
+  arrange(rel_to_med) |>
+  select(dest, carrier, flight, air_time, med_air_time, rel_to_med) |>
+  head(20)
+
+'Which flights were most delayed in the air'
+air_time_check |>
+  arrange(desc(rel_to_min)) |> #反過來,看相對最短時間「多花了多少」
+  select(dest, carrier, flight, air_time, min_air_time, rel_to_min) |>
+  head(20)
+
+#Q8
+'Find all destinations that are flown by at least two carriers. Use those destinations to '
+'relative ranking of the carriers based on their performance for the same destination'
+# 第一步:哪些目的地有 >= 2 家航空
+dest_multi <- flights |>
+  distinct(dest, carrier) |>
+  count(dest) |>
+  filter(n >= 2)
+# 剛剛的第一步看不懂的話:
+dest_multi <- flights |>
+  group_by(dest) |>
+  # n_distinct() 會自動在幕後幫你算：這組裡面有幾種不重複的 carrier
+  summarize(n_carriers = n_distinct(carrier)) |>
+  filter(n_carriers >= 2)
+
+# 第二步:只看這些目的地,算每家航空在每個目的地的平均延誤,
+# 再依目的地分別排名(名次 1 = 該目的地最準時)
+flights |>
+  filter(!is.na(arr_delay), dest %in% dest_multi$dest) |> #我只要那些在dest_multi裡(符合>=2條件)的dest
+  group_by(dest, carrier) |> #1.算每家航空(carrier)在不同dest的平均
+  summarize(avg_delay = mean(arr_delay), n = n(), .groups = "drop") |> #計算組別值 => 用summarize
+  group_by(dest) |> #2.依照不同dest 算各家航空的排名
+  mutate(rank = rank(avg_delay)) |> #計算個別值 => mutate
+  ungroup() |>
+  group_by(carrier) |> #3.綜合起來 算每家航空的排名
+  summarize(avg_rank = mean(rank), n_dest = n_distinct(dest)) |> #每家航空排名平均值
+
+# -------------------------------------------------------------------------
+# quantile(var_name, 第幾分位數, na.rm)
+summarize(
+  max = max(dep_delay, na.rm = TRUE),
+  q95 = quantile(dep_delay, 0.95, na.rm = TRUE)
+
+#如果不是要分位數的數值，是要Spread的話:
+# Two commonly used summaries are sd(x), and IQR()
 
 
 
