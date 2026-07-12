@@ -1960,15 +1960,136 @@ flights |>
   summarize(avg_rank = mean(rank), n_dest = n_distinct(dest)) |> #每家航空排名平均值
 
 # -------------------------------------------------------------------------
-# quantile(var_name, 第幾分位數, na.rm)
+# 更多summarize()裡的argument:
+
+"quantile(var_name, 第幾分位數, na.rm)"
 summarize(
   max = max(dep_delay, na.rm = TRUE),
   q95 = quantile(dep_delay, 0.95, na.rm = TRUE)
 
 #如果不是要分位數的數值，是要Spread的話:
 # Two commonly used summaries are sd(x), and IQR()
+'IQR()'
+summarize(
+  distance_iqr = IQR(distance),  #算一個變數的四分位距
+  n = n()
+
+# -------------------------------------------------------------------------
+# interaction(var_name1, var_name2) :把合併後產物當成factor版本的paste0(是factor的話就會自動排序好大小順序，畫圖方便)
+# 這題這樣就是想看dep_delay的每日freqpoly(頻率折線圖)分布，所以只指定X，Y就會自動是count
+flights |>
+  filter(dep_delay < 120) |> 
+  ggplot(aes(x = dep_delay, group = interaction(day, month))) + 
+  geom_freqpoly(binwidth = 5, alpha = 1/5)
+
+# 13.6.5 Positions --------------------------------------------------------
+
+# 想要每天的第1、最後、第5筆資料:
+flights |> 
+  group_by(year, month, day) |> 
+  summarize(
+    first_dep = first(dep_time, na_rm = TRUE), 
+    fifth_dep = nth(dep_time, 5, na_rm = TRUE), # nth 自己指定第n個
+    last_dep = last(dep_time, na_rm = TRUE))  # 注意!dplyr 用的是na_rm；算簡單數學的是na.rm
+
+# 舉例:
+flights |> 
+  group_by(year, month, day) |> 
+  mutate(r = min_rank(sched_dep_time)) |> 
+  filter(r %in% c(1, max(r)))
+
+# 如果是想抓最大最小值 忽略時間順序的話:
+slice_max(sched_dep_time, n = 1) #=> 但這不能在同一串裡面先後接著，如果想同時取最大最小，要用
+filter(變數 == min(變數) | 變數 == max(變數))
+
+# 13.6.6 With mutate() ----------------------------------------------------
+
+x / sum(x) # proportion of a total.
+(x - mean(x)) / sd(x) # Z-score (standardized to mean 0 and sd 1).
+(x - min(x)) / (max(x) - min(x)) # standardizes to range [0, 1].
+x / first(x) # index based on the first observation.
+
+# 13.6.7 Exercises --------------------------------------------------------
+
+# Q1
+library(nycflights13)
+library(dplyr)
+
+# 追蹤同一架飛機的連鎖延誤
+airplane_chains <- flights %>%
+  filter(!is.na(dep_delay), !is.na(tailnum)) %>%
+  arrange(tailnum, year, month, day, dep_time) %>%  # 按照飛機和時間排序
+  group_by(tailnum) %>%
+  mutate(
+    prev_dep_delay = lag(dep_delay) # 抓出這架飛機「上一班」的延誤時間
+  ) %>%
+  filter(!is.na(prev_dep_delay)) # 刪除當天第一班（沒有前一班資料）
+
+# 看一下結果：如果上一班延誤超過30分鐘，這一班的平均延誤
+airplane_chains %>%
+  group_by(prev_delay_status = prev_dep_delay > 30) %>%
+  summarise(
+    avg_current_delay = mean(dep_delay),
+    flight_count = n())
+
+# Q2
+'Which destinations show the greatest variation in air speed'
+flights |>
+  select(dest, distance, air_time) |>
+  group_by(dest) |> #!題目要的是各個dest
+  summarize(var_air_speed = var(distance/air_time, na.rm = T),
+            n = n()) |>
+  filter(n() > 1) |>
+  arrange(desc(var_air_speed)) |>
+  relocate(var_air_speed) 
+
+# Q3
+'EGE機場是否搬家'
+
+library(nycflights13)
+library(ggplot2)
+library(dplyr)
+# 1. 撈出所有飛往 EGE 的航班
+ege_flights <- flights %>% 
+  filter(dest == "EGE")
+
+# 2. 畫圖：看看不同年份/月份，不同航空公司的飛行距離變化
+ggplot(ege_flights, aes(x = factor(month), y = distance, fill = carrier)) +
+  geom_boxplot() +
+  labs(title = "Exploring the Adventures of EGE Airport",
+       x = "Month",
+       y = "Flight Distance (miles)",
+       fill = "Airline (Carrier)") +
+  theme_minimal()
+
+# -------------------------------------------------------------------------
+
+# 先把資料濃縮成「每個月、每家航空公司的中位數距離」
+ege_summary <- flights %>% 
+  filter(dest == "EGE") %>% 
+  group_by(month, carrier) %>% 
+  summarise(median_distance = median(distance, na.rm = TRUE), .groups = "drop")
+
+# 畫折線圖：乾淨俐落，完全沒有 Overplot 的問題
+ggplot(ege_summary, aes(x = factor(month), y = median_distance, color = carrier, group = carrier)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  labs(title = "EGE Flight Distance Trend (No Overplotting)", x = "Month", y = "Median Distance") +
+  theme_minimal()
+
+# 14  Strings -------------------------------------------------------------
 
 
 
-
-
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
