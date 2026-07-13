@@ -2078,18 +2078,271 @@ ggplot(ege_summary, aes(x = factor(month), y = median_distance, color = carrier,
   theme_minimal()
 
 # 14  Strings -------------------------------------------------------------
+# 如果要打以下三個:單雙引號、反斜線，在他們之前要先加上跳脫字元(反斜線\)
+# 前提是內外引號一樣啦 不一樣的話就沒關係 不會被誤認
+my_str <- 'this is example of typing \', \", and \\ '
+my_str
+
+# 補充: 算字數 用'nchar()'
+
+# 14.2.4 Exercises --------------------------------------------------------
+#He said "That's amazing!"
+cat('He said \"That\'s amazing!\"') #注意英文縮寫(還是那叫簡寫?)也要
+#\a\b\c\d
+cat('\\a\\b\\c\\d')
+#\\\\\\
+cat('\\\\\\\\\\\\')  
+
+# 14.3 Creating many strings from data ------------------------------------
+'str_c()' # 把多個vectors變成一個str vector
+library(stringr)
+
+whtsthediff <- c('x', 'y', 'z') # length(whtsthediff) = 3
+textbookex <- str_c('x', 'y', 'z') # length(textbookex) = 1
+class(whtsthediff) #都是character；都是向量，只是長度不同
+class(textbookex)  
+
+#paste跟str_c只有在處理NA時、以及 要黏貼的東西長度不同時是否會警告你 不一樣 
+paste('Hello', c("John", "Susan"), sep = '_')
+str_c("Hello ", c("John", "Susan"))  #單字跟單字中間會自動空格
+   
+#補充:paste0跟paste的sep=指定符號，符號的位置不同
+# paste0 的 sep 是放在不同結果中間，paste 的是放在同一個結果裡字跟字之間
+
+paste(c('x', 'y', 'z'), collapse = ",") #有加collapse=某個間隔符號的話就會偵測內容 最後存成一個而已(長度=1))
+paste(c('x', 'y', 'z')) 
+paste(..., sep = "") #就可以百分之百取代 paste0()
+
+# 有NA時，指定回應內容，用: -----------------------------------------------------------
+'coalesce()'
+df |> 
+  mutate(
+    greeting1 = str_c("Hi ", coalesce(name, "you"), "!"), #如果不是NA就用name,如果是NA就用you
+    greeting2 = coalesce(str_c("Hi ", name, "!"), "Hi!")) #如果不是NA就用Hi name!,如果是NA就用Hi!
+
+# 一個句子裡，被很多個變數隔成很多個字串 -----------------------------------------------------
+'str_glue()' # 也就是用一組引號就好，裡面的變數名稱用大括號括起來
+
+# 原本的痛苦寫法：
+paste("哈囉，我是", name, "，我今年", age, "歲了。")
+# 用 str_glue：
+str_glue("哈囉，我是 {name}，我今年 {age} 歲了。")
 
 
+'str_flatten()'
+# str_flatten(要壓平的東西，'中間要填充的(default = 沒東西 所以才會說是壓平)')
+str_flatten(c("x", "y", "z"), ", ")
 
+# str_flatten(要壓平的東西，'中間要填充的東西'，last = "最後一個中間要填充的東西")
+str_flatten(c("x", "y", "z"), ", ", last = ", and ")
+
+#示範:
+df <- tribble(
+  ~ name, ~ fruit,
+  "Carmen", "banana",
+  "Carmen", "apple",
+  "Marvin", "nectarine",
+  "Terence", "cantaloupe",
+  "Terence", "papaya",
+  "Terence", "mandarin")
+df |>
+  group_by(name) |>  #row的名稱要是什麼
+  summarize(fruits = str_flatten(fruit, ", "))
+
+# 14.3.4 Exercises --------------------------------------------------------
+#str_c("The price of ", food, " is ", price)
+str_glue("The price of {food} is {price}")
+#str_glue("I'm {age} years old and live in {country}")
+str_c("I'm", age ,"years old and live in",country, sep = " ") #注意!str_c預設變數跟字串之間沒空格
+#str_c("\\section{", title, "}")
+str_glue("\\section{ {title} }")
+
+# 14.4 Extracting data from strings ---------------------------------------
+
+#separate_longer_delim
+df1 <- tibble(x = c("a,b,c", "d,e", "f"))
+df1 |> 
+  separate_longer_delim(x, delim = ",") # 依照間隔的元素
+#separate_longer_position
+df2 <- tibble(x = c("1211", "131", "21"))
+df2 |> 
+  separate_longer_position(x, width = 1) #依照固定的字元長度
+#separate_wider_delim
+df3 <- tibble(x = c("a10.1.2022", "b10.2.2011", "e15.1.2015"))
+df3 |> 
+  separate_wider_delim(
+    x,
+    delim = ".",  #指定間隔元素
+    names = c("code", "edition", "year"))  #指定新增的col_name(因為是wider)
+df3 |> 
+  separate_wider_delim(
+    x,
+    delim = ".",
+    names = c("code", NA, "year"))  #! 如果我不要某一組資料 就讓col_name是NA就好
+#separate_wider_position
+df4 <- tibble(x = c("202215TX", "202122LA", "202325CA")) 
+df4 |> 
+  separate_wider_position(
+    x,
+    widths = c(year = 4, age = 2, state = 2)) #指定固定佔了幾格去劃分
+
+# 14.4.3 Diagnosing widening problems -------------------------------------
+# 用arguments to help: too_few and too_many
+
+debug <- df |>  
+  separate_wider_delim(
+    a,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_few = "debug")  #會得到新的3個col(分別是:a_ok  a_pieces a_remainder)
+debug |> filter(!a_ok)  #取出不ok的
+
+'上面感覺是在存一個裝著規格不對的資料大集合，存起來看；下面是直接處理，決定之後的資料要長怎樣'
+
+# fill in the missing pieces with NAs and move on.
+# => 用:too_few = "align_start"， too_few = "align_end"
+df |> 
+  separate_wider_delim(
+    a,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_few = "align_start")  # 少的就填入NA
+
+# 決定多出來的資料怎麼處理
+#用: too_many = "drop"，too_many = "merge"
+df |> 
+  separate_wider_delim(
+    a,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_many = "drop")  # 照格式填完 把多的丟掉
+
+df |> 
+  separate_wider_delim(
+    a,
+    delim = "-",
+    names = c("x", "y", "z"),
+    too_many = "merge")  # 多的都保留 寫在最後一項
+
+# 14.5 Letters ------------------------------------------------------------
+
+str_length() #看字母有幾個 #count()的話是算出現次數
+
+#示範:
+library(babynames)  
+glimpse(babynames)
+
+#如果我想看每個名字長度的出現次數。結果只會有名字常度跟次數兩行
+babynames |>
+  count(length = str_length(name), wt = n) 
+
+#如果我想看名字長度是15 的人裡 有哪些名字 各個名字的出現次數
+babynames |> 
+  filter(str_length(name) == 15) |> 
+  count(name, wt = n, sort = TRUE)
+
+# mine
+babynames |>
+  group_by(name) |> #1
+  summarize(n = n()) |> #2
+  mutate(length = str_length(name)) |>
+  relocate(name, length, n) |>
+  arrange(desc(length), desc(n))
+
+# count()的用法: # 自動幫你 group_by + summarize(n=n()) 變成不重複名單
+# 這是你程式碼的「人類閱讀精簡版」，效能跟你原本的一樣好！
+babynames |>
+  count(name) |> #1+2
+  mutate(length = str_length(name)) |>
+  relocate(name, length, n) |>
+  arrange(desc(length), desc(n))
+
+# 14.5.2 Subsetting -------------------------------------------------------
+'str_sub(string, start, end)'
+
+babynames |> 
+  mutate(
+    first = str_sub(name, 1, 1),
+    last = str_sub(name, -1, -1))
+
+# 14.5.3 Exercises --------------------------------------------------------
+
+# Q3
+'trends in length of babynames over time?'
+range(babynames$year)
+
+babynames |>
+  mutate(length = factor(str_length(name)))  |> # 轉成 factor，讓每種長度自成一條線
+  # 加上 weight = n（R 會把實際出生人數加總，用於叫R用我算好了的數字，不要再自己去count時）
+  ggplot(aes(x = year, weight = n, color = length)) + #n可以改成prop。
+  geom_freqpoly(lwd = 0.01) +
+  coord_cartesian(xlim = c(1880, 2017))
+
+'popularity of first and last letters?'
+library(babynames)
+library(tidyverse)
+
+babynames |>
+  # 1. 抓出首字與尾字，並統一轉大寫
+  mutate(
+    `首字 (First Letter)` = toupper(str_sub(name, start = 1, end = 1)),
+    `尾字 (Last Letter)`  = toupper(str_sub(name, start = -1, end = -1))) |>
+  # 2. 轉成「長資料」以便同時畫兩張圖
+  pivot_longer(
+    cols = c(`首字 (First Letter)`, `尾字 (Last Letter)`),
+    names_to = "position",
+    values_to = "letter") |>
+  # 3. 開始畫圖
+  ggplot(aes(x = year, weight = n, color = letter)) +
+  geom_freqpoly(binwidth = 1, show.legend = FALSE) + # 字母太多，不顯示圖例畫面比較乾淨
+  facet_wrap(~ position, scales = "free_y") +
+  coord_cartesian(xlim = c(1880, 2017)) +
+  labs(
+    title = "美國嬰兒名字首字與尾字之歷史流行趨勢",
+    x = "年份",
+    y = "出生總人數"
+  ) +
+  theme_minimal()
+
+# 15  Regular expressions -------------------------------------------------
+# 15.2 Pattern basics
+
+str_view(fruit, "apple")
+str_view(fruit, "apple|melon|nut") #alternation
+
+#. 跟空白框框一樣
+str_view(words, "q...e")
+str_view(words, "q....e")
+str_view(words, "q.e")
+
+#找出a + 任意一格
+str_view(c("a", "ab", "ae", "bd", "ea", "eab"), "a.")
+
+# Quantifiers (數量詞) -------------------------------------------------------
+# 控制緊接著左邊的那一個字母!
+'?': 0到1次(可有可無)
+'+': 至少一次，越多越好
+'*': 隨便(0~無限多次)
+
+# Character classes -------------------------------------------------------
+"[]": 只要有出現在括號裡，就算符合
+#例如:[aeiou]
+"[^]": 加上^，變成反義
   
+"[]x[]":給定左右兩邊指定要的set
+#例如:[aeiou]x[aeiou]
   
+"[^]y[^]":當前後是^時 要把X改成Y
+
+# 15.3 Key functions ------------------------------------------------------
+
+# 15.3.1 Detect matches ---------------------------------------------------
+str_detect(c("a", "b", "c"), "[aeiou]")
+
+#看到產出邏輯值 => 想到跟filter連用
+
+ 
   
-  
-  
-  
-  
-  
-  
-  
+
   
   
