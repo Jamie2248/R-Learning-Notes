@@ -2337,12 +2337,200 @@ str_view(c("a", "ab", "ae", "bd", "ea", "eab"), "a.")
 # 15.3 Key functions ------------------------------------------------------
 
 # 15.3.1 Detect matches ---------------------------------------------------
-str_detect(c("a", "b", "c"), "[aeiou]")
 
+str_detect(c("a", "b", "c"), "[aeiou]") #(我要判斷的東西們，有沒有在我指定的set裡)；set用"[]"包起來
 #看到產出邏輯值 => 想到跟filter連用
 
- 
+# 示範: 我想找名字裡有X的人的數字 以及他們的名字
+babynames |>
+  filter(str_detect(name, "[x]")) |>
+  count(name,wt = n, sort = T) # 只有wt=n, 沒有weight=n這個東西
+# 沒加wt=n的話 算出來會是名字在每年是否有出現。加了才是真正的人數
   
+babynames |> 
+  summarize(含有x的比例 = mean(str_detect(name, "[x]")))
+# 示範: (翻譯程式碼想做的事:每年名字有X的比例 的圖)
+babynames |> 
+  group_by(year) |>  #想看每年 依照年來分 => group_by(year)
+  summarize(prop_x = mean(str_detect(name, "x"))) |> # 在確定好X軸變數的組別之後 以既定組別為前提 計算Y軸
+  ggplot(aes(x = year, y = prop_x)) + 
+  geom_line()
+  
+#補充:還有
+'str_subset()' #跟str_view不同在這個是得到字串向量，可存入變數，進行後續資料清理。view是用來檢查與測試的，得到 HTML/文字顯示物件（僅供閱讀）
+# more arguments:
+#1. negate = TRUE，抓出「不包含」指定條件的元素。
+#2. regex("A", ignore_case = TRUE)，取代"A"，忽略大小寫
 
-  
-  
+'str_which()' # which是return數字index,告訴你符合的東西在哪些位置
+
+# 15.3.2 Count matches ----------------------------------------------------
+' str_count()' # 看我的X裡的每個元素 各自出現幾次我好奇的東西
+
+x <- c("apple", "banana", "pear")
+str_count(x, "p") # X有n個元素，則得到n個數字
+
+str_count("abababa", "aba")
+str_view("abababa", "aba") # this shows that :regex matches never overlap(前後不重疊)
+
+# str_count()與mutate連用，示範:
+babynames |> 
+  count(name) |>  # 先數每個名字的出現次數
+  mutate(
+    vowels = str_count(name, "[aeiou]"),
+    consonants = str_count(name, "[^aeiou]"))
+#解決上面的大小寫問題: 
+#1. 土法煉鋼 把所有大小寫寫進[]裡
+#2. regex("[aeiou]", ignore_case = TRUE) 
+#3. 換成小寫: str_to_lower(name) ； 可以寫在str_count哩，也可以在mutate時新增一個新的小寫變數
+
+# 15.3.3 Replace values ---------------------------------------------------
+'str_replace()' #(my_data, set(我要替換掉哪些元素)，換成什麼東西)
+# 示範
+x <- c("apple", "pear", "banana")
+str_replace_all(x, "[aeiou]", "-")
+
+'str_replace_all()'  #(my_data, set(哪些元素我要讓他們消失))
+# 只給兩個argument,沒指定新的要換成什麼東西時，default = ""，等同於str_replace(x, pattern, "")
+# ! 結論: 它們兩個差在 all是換掉全部的 否則只會換第一個!
+
+# str_replace() 常與mutate連用，資料清理
+
+# 15.3.4 Extract variables ------------------------------------------------
+'separate_wider_regex(my_data, patterns(也就是格式))'
+df <- tribble(
+  ~str,
+  "<Sheryl>-F_34",
+  "<Kisha>-F_45", 
+  "<Brandon>-N_33",
+  "<Sharon>-F_38", 
+  "<Penny>-F_58",
+  "<Justin>-M_41", 
+  "<Patricia>-F_84",) #最後要逗號喔? 好奇怪
+
+df |> 
+  separate_wider_regex(str,
+                       patterns = c("<",  name = "[A-Za-z]+", ">-", gender = ".", "_", age = "[0-9]+"))
+# regex可以讓我指定格式，格式裡的變數是新的，執行完會得到以新變數為col_name的新表格
+# 新變數也需要指定格式，用之前學/練習過的那些符號
+ 
+#如果對照失敗，跟前面的separate_wider_delim() and separate_wider_position()一樣，用too_few = "debug"來看哪些錯了
+
+# 15.3.5 Exercises --------------------------------------------------------
+# Q1
+'What baby name has the most vowels? What name has the highest proportion of vowels? (Hint: what is the denominator?)'
+babynames |> 
+  distinct(name) |>  
+  mutate(prop_vowels = str_count(name, "[aeiouAEIOU]")/str_length(name), #str_length() 用來算字長
+         n_vowels = sum(str_count(name, "[aeiouAEIOU]"))) |>
+  arrange(desc(prop_vowels), desc(n_vowels))|> 
+#可以再加上: 
+# 找出母音最多、與比例最高的人
+  summarize(
+  max_vowels_name = name[which.max(n_vowels)],
+  max_prop_name   = name[which.max(prop_vowels)])
+
+# Q2  
+x <- "a/b/c/d/e"
+y <- str_replace_all(x, "/", "\\\\")
+print(y)
+
+# Q3
+'用 str_replace_all() 做 str_to_lower() '
+input <- readline(prompt = "請輸入英文字母，大小寫不限:")
+#input <- "aiJF"
+str_replace_all(input, "[A-Z]", tolower) #第三個是字串或是函數，寫"[a-z]"的話是錯的
+
+# Q4
+'Create a regular expression that will match telephone numbers as commonly written in your country.'
+#(+886)0911-235-653
+"\\(\\+[0-9]{3}\\)[0-9]{4}-?[0-9]{3}-?[0-9]{3}"
+#括號、加號+、點. 這三個前面要加上解鎖符號(escape) \\
+
+# 15.4.1 Escaping ---------------------------------------------------------
+# to match a literal value like: ., $, |, *, +, ?, {, }, (, ),
+# 用中括號包起來，就不用用反斜線了。 !用在pattern裡(要match時)
+
+# 15.4.2 Anchors ----------------------------------------------------------
+
+str_view(fruit, "^a") #words that start with 字母a
+str_view(fruit, "a$") #end
+
+x <- c("summary(x)", "summarize(df)", "rowsum(x)", "sum(x)")
+str_view(x, "\\bsum\\b") # 指定the start or end of a word (match the boundary between words)
+
+# 綜合示範:
+str_replace_all("abc", c("$", "^", "\\b"), "--")
+#引號裡的跳脫字元要兩個
+
+# -------------------------------------------------------------------------
+# 找我給定的X裡 哪些字元符合某種格式
+\d matches any digit
+\s matches any whitespace (e.g., space, tab, newline)
+\w matches any “word” character, i.e. letters and numbers
+# 大寫(D S W)就是相反
+
+#舉例:
+x <- "abcd ABCD 12345 -!@#%."
+str_view(x, "\\S+")
+str_view(x, "\\w+")
+
+# 15.4.4 Quantifiers ------------------------------------------------------
+
+# control how many times a pattern matches
+{n} matches exactly n times.
+{n,} matches at least n times.
+{n,m} matches between n and m times.
+
+str_view("ababab", "ab+")
+str_view("ababab", "(ab)+")
+
+# ?:
+x <- c("a gray cat", "a grey dog")
+str_match(x, "gr(e|a)y")
+str_match(x, "gr(?:e|a)y")
+
+#選項 (Alternation)： 優先級最低
+# \1 回頭引用 (Backreference): 重複前面抓到的東西
+# Lookahead / Lookbehind (前後預查)
+
+# 15.5.1 Regex flags ------------------------------------------------------
+regex()
+# ignore_case = TRUE
+bananas <- c("banana", "Banana", "BANANA")
+str_view(bananas, "banana")
+str_view(bananas, regex("banana", ignore_case = TRUE))
+
+# dotall = TRUE
+x <- "Line 1\nLine 2\nLine 3"
+str_view(x, ".Line")
+str_view(x, regex(".Line", dotall = TRUE))
+
+# multiline = TRUE
+x <- "Line 1\nLine 2\nLine 3"
+str_view(x, "^Line")
+str_view(x, regex("^Line", multiline = TRUE))
+
+# comments = TRUE
+phone <- regex(
+  r"(\(?     # optional opening parens
+    (\d{3}) # area code
+    [)\-]?  # optional closing parens or dash
+    \ ?     # optional space
+    (\d{3}) # another three numbers
+    [\ -]?  # optional space or dash
+    (\d{4}) # four more numbers)", 
+  comments = TRUE)
+
+str_extract(c("514-791-8141", "(123) 456 7890", "123456"), phone)
+
+# 15.5.2 Fixed matches ----------------------------------------------------
+' fixed()' #先跳過
+
+
+
+
+
+
+
+
