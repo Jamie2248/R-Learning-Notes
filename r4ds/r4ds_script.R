@@ -2465,7 +2465,7 @@ str_replace_all("abc", c("$", "^", "\\b"), "--")
 
 # -------------------------------------------------------------------------
 # 找我給定的X裡 哪些字元符合某種格式
-\d matches any digit
+\d matches any digit  #等同於 [0-9]
 \s matches any whitespace (e.g., space, tab, newline)
 \w matches any “word” character, i.e. letters and numbers
 # 大寫(D S W)就是相反
@@ -2526,6 +2526,485 @@ str_extract(c("514-791-8141", "(123) 456 7890", "123456"), phone)
 
 # 15.5.2 Fixed matches ----------------------------------------------------
 ' fixed()' #先跳過
+# 還有str_detect()
+
+# str_c()跟str_flatten()連用:
+rgb <- c("red", "green", "blue")
+str_c("\\b(", str_flatten(rgb, "|"), ")\\b")
+
+# 看所有顏色
+str_view(colors())
+
+# 去掉有數字的顏色
+cols <- colors()
+cols <- cols[!str_detect(cols, "\\d")]
+str_view(cols)
+# 抓只有字母的顏色的部分出來(?)
+pattern <- str_c("\\b(", str_flatten(cols, "|"), ")\\b")
+str_view(sentences, pattern)
+
+# 第15章 實際連用 ---------------------------------------------------------------
+'matches(pattern)'
+flights |> select(matches("^dep_"))  #依照給定條件來抓取"col"
+# select()之外 也可以用rename_with()、across()
+
+'pivot_longer(names_pattern = )'
+# 情境:如果你欄位名字長得像 wk1_control、wk2_treatment 這種
+df |> 
+  pivot_longer(
+    cols = starts_with("wk"),
+    names_to = c("week", "condition"),
+    names_pattern = "(wk\\d)_(.*)" #用括號來切
+  )
+
+'separate_wider_delim(col, delim = regex()) '
+separate_wider_delim(col, delim = regex(", ?"), names = c("a", "b"))
+
+# 接下來的第16 17 18章只會做筆記，19 25 26才會題目也做
+
+# 16  Factors -------------------------------------------------------------
+library(tidyverse)
+
+# 先做一個level，用先後代表順序
+month_levels <- c(
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+# sort() :用來排序 
+x1 <- c("Dec", "Apr", "Jan", "Mar") #沒有順序的文字向量
+
+y1 <- factor(x1, levels = month_levels) #轉成factor => 給定levels(像是排序的規則?)
+y1
+levels(y2)
+
+sort(y1) #轉成factor後才能用sort()排序，此時才有順序
+
+#
+x2 <- c("Dec", "Apr", "Jam", "Mar") #有typo
+
+y2 <- factor(x2, levels = month_levels) #用factor()有風險 因為是照字串排列 每台電腦可能不同?
+y2  #不在level規則裡的會對應到NA
+
+install.packages("forcats")
+library(forcats)
+y2 <- fct(x2, levels = month_levels) #用fct()比較好?因為是依據首次出現的順序? 
+
+# 一讀進來就先立col的規則/先後順序 -----------------------------------------------------
+csv <- "month,value
+        Jan,12
+        Feb,56
+        Mar,12"
+
+# 舊方法
+library(readr)
+
+df <- read_csv(csv)  #先讀進來再說
+df$month <- factor(df$month, levels = ...) 
+
+# 新方法
+df <- read_csv(csv, col_types = cols(month = col_factor(month_levels)))
+# col_types = cols(你的欄位名稱 = col_factor(levels = 自定義的字串先後順序規則))
+df$month
+
+# 16.3 General Social Survey ----------------------------------------------
+# 用forcats::gss_cat這個資料集
+gss_cat
+?gss_cat
+
+#範例:
+library(dplyr)
+library(ggplot2)
+
+relig_summary <- gss_cat |>
+  group_by(relig) |>
+  summarize(
+    tvhours = mean(tvhours, na.rm = TRUE),
+    n = n()) # n = n() 加了又沒差 幹嘛加?
+
+ggplot(relig_summary, aes(x = tvhours, y = relig)) +
+  geom_point()
+
+'fct_reorder()' #依照第二個變數名稱的數值大小，去幫第一個變數（factor）排序
+# arguments:(是factor的變數名稱，按照哪個變數的大小值來排序，.fun的default是中位數)
+ggplot(relig_summary, aes(x = tvhours, y = fct_reorder(relig, tvhours))) +
+  geom_point()
+
+'fct_relevel()'  #把我指定的某一個變數拉到最前面的位置顯示
+ggplot(rincome_summary, aes(x = age, y = fct_relevel(rincome, "Not applicable"))) +
+  geom_point()
+
+'fct_reorder2()' # (原本的分組，X軸，Y軸)
+# 把圖例的顏色順序，調整到跟折線圖『最右端』的高低順序一樣
+by_age <- gss_cat |>
+  filter(!is.na(age)) |>
+  count(age, marital) |>
+  group_by(age) |>
+  mutate(
+    prop = n / sum(n))
+# 舊畫法 線的顏色很難對照去看
+ggplot(by_age, aes(x = age, y = prop, color = marital)) +
+  geom_line(linewidth = 1) +
+  scale_color_brewer(palette = "Set1")
+# 新
+ggplot(by_age, aes(x = age, y = prop, color = fct_reorder2(marital, age, prop))) +
+  geom_line(linewidth = 1) +
+  scale_color_brewer(palette = "Set1") +
+  labs(color = "marital")
+
+'fct_infreq()' #order levels in decreasing frequency(將因子的 Levels 按照出現頻率由高到低重新排序)
+'fct_rev()' #in increasing frequency(反過來=>由小到大)
+gss_cat |>
+  mutate(marital = marital |> fct_infreq() |> fct_rev()) |> #在mutate裡!
+  ggplot(aes(x = marital)) +
+  geom_bar()
+
+# 16.5 Modifying factor levels --------------------------------------------
+
+'fct_recode()' 
+gss_cat |>
+  mutate(
+    partyid = fct_recode(partyid,
+                         "Republican, strong"    = "Strong republican",
+                         "Republican, weak"      = "Not str republican",
+                         "Independent, near rep" = "Ind,near rep",
+                         "Independent, near dem" = "Ind,near dem",
+                         "Democrat, weak"        = "Not str democrat",
+                         "Democrat, strong"      = "Strong democrat")) |> #某個欄位名稱 = fct_recode(某個欄位名稱，"新稱"="舊稱")
+  count(partyid)
+
+'fct_collapse()'  #可以一次給很多舊稱一個新稱
+gss_cat |>
+  mutate(
+    partyid = fct_collapse(partyid,
+                           "other" = c("No answer", "Don't know", "Other party"),
+                           "rep" = c("Strong republican", "Not str republican"),
+                           "ind" = c("Ind,near rep", "Independent", "Ind,near dem"),
+                           "dem" = c("Not str democrat", "Strong democrat"))) |>
+  count(partyid)
+# -------------------------------------------------------------------------
+
+'fct_lump_lowfreq()'  #(指定某個col)，把最大的獨立出來，其餘的集合成other
+gss_cat |>
+  mutate(relig = fct_lump_lowfreq(relig)) |>
+  count(relig) 
+
+'fct_lump_n()' #(指定某個col，n):可以指定我除了最大的以外 再多顯示幾個
+gss_cat |>
+  mutate(relig = fct_lump_n(relig, n = 10)) |>
+  count(relig, sort = TRUE)
+
+# 補充:另外還有
+'fct_lump_min()''fct_lump_prop()'
+
+# 16.6 Ordered factors ----------------------------------------------------
+
+'ordered()' #給定一個levels(順序/規則)
+ordered(c("a", "b", "c")) #ordered(一個文字向量) => 有"ordered"的"factor" 
+
+# 17  Dates and times -----------------------------------------------------
+
+# lubridate 在 tidyverse 裡面
+library(tidyverse)
+library(nycflights13)
+
+# date-time = <dttm> = POSIXct (in Base R)
+
+# To get the current date or date-time:
+today()
+now()
+
+# use col_types plus col_date() or col_datetime() along with a date-time format. 
+
+#date-time format:
+# %Y	4 digit year； %y	2 digit year
+# %m	Number； %b	Abbreviated name； %B	Full name
+# %d  One or two digits； %e	Two digits
+# %H	24-hour hour； 	%M	Minutes； 	%S	Seconds
+
+'col_types' 'col_date()'
+csv <- "date
+        01/02/15"
+read_csv(csv, 
+         col_types = cols(date = col_date("%m/%d/%y")))
+
+'col_datetime()' 
+
+# 17.2.2 From strings -----------------------------------------------------
+'ymd()'
+# 各種形式都能自動偵測? create時間?
+ymd("2017-01-31", tz = "UTC")
+mdy("January 31st, 2017")
+dmy("31-Jan-2017")
+ymd_hms("2017-01-31 20:11:59")
+
+# 17.2.3 From individual components ---------------------------------------
+#individual component是指...?表格?tibble?
+
+# use make_date() for dates, or make_datetime() for date-times
+'make_date()'
+
+'make_datetime()'
+flights |> 
+  select(year, month, day, hour, minute) |> 
+  mutate(departure = make_datetime(year, month, day, hour, minute)) #產生一個新欄位，資料型態是dttm
+
+# 範例:
+make_datetime_100 <- function(year, month, day, time) {
+  make_datetime(year, month, day, time %/% 100, time %% 100)}
+flights_dt <- flights |> 
+  filter(!is.na(dep_time), !is.na(arr_time)) |> 
+  mutate(dep_time = make_datetime_100(year, month, day, dep_time),
+         arr_time = make_datetime_100(year, month, day, arr_time),
+         sched_dep_time = make_datetime_100(year, month, day, sched_dep_time),
+         sched_arr_time = make_datetime_100(year, month, day, sched_arr_time)) |> 
+  select(origin, dest, ends_with("delay"), ends_with("time"))
+
+flights_dt |>  # !
+  filter(dep_time < ymd(20130102)) |> 
+  ggplot(aes(x = dep_time)) + 
+  geom_freqpoly(binwidth = 600) # 600 s = 10 minutes
+
+# 17.2.4 From other types -------------------------------------------------
+
+'as_datetime()' 'as_date():'
+as_datetime(60 * 60 * 10)
+as_date(365 * 10 + 2)
+
+# 17.3 Date-time components -----------------------------------------------
+datetime <- ymd_hms("2026-07-08 12:34:56")
+
+year(datetime)
+month(datetime)
+mday(datetime) # 這個月的幾號
+yday(datetime) # day of year => 今年的第幾天(?
+wday(datetime) # 一周的第幾天 => 星期幾
+# month()跟wday()可以設argument: label = TRUE，就會是英文簡寫；如果設abbr = FALSE就會變英文全名
+
+# 範例: (我想看一周的__次數分布)
+flights_dt |> 
+  mutate(wday = wday(dep_time, label = TRUE)) |> 
+  ggplot(aes(x = wday)) +
+  geom_bar()
+
+# 範例: (在一小時中的哪個分鐘區間 延誤比較嚴重)
+#(圖一)預計
+sched_dep <- flights_dt |> 
+  mutate(minute = minute(sched_dep_time)) |> 
+  group_by(minute) |> 
+  summarize(avg_delay = mean(arr_delay, na.rm = TRUE),
+            n = n())
+ggplot(sched_dep, aes(x = minute, y = avg_delay)) +
+  geom_line()
+#(圖二)實際
+flights_dt |> 
+  mutate(minute = minute(dep_time)) |> 
+  group_by(minute) |> 
+  summarize(avg_delay = mean(dep_delay, na.rm = TRUE),
+            n = n()) |>
+  ggplot(aes(x = minute, y = avg_delay)) +
+  geom_line()
+
+# 17.3.2 Rounding ---------------------------------------------------------
+'floor_date()'
+'round_date()'
+'ceiling_date()'
+# 示範一:
+flights_dt |> 
+  count(week = floor_date(dep_time, "week")) |>  # !
+  ggplot(aes(x = week, y = n)) +
+  geom_line() + 
+  geom_point()
+# 二
+flights_dt |> 
+  mutate(dep_hour = hms::as_hms(dep_time - floor_date(dep_time, "day"))) |> 
+  ggplot(aes(x = dep_hour)) +
+  geom_freqpoly(binwidth = 60 * 30)
+
+# 17.3.3 Modifying components ---------------------------------------------
+
+'update()'
+# 舊方法
+datetime <- ymd_hms("2026-07-08 12:34:56")
+hour(datetime) <- hour(datetime) + 1 # 舊的哪個要改<-舊的改怎樣
+datetime
+# 用更新的
+update(datetime, year = 2030, month = 2, mday = 2, hour = 2) # 更新(哪個日期要改，年月日分別=多少)
+
+# 17.4 Time spans ---------------------------------------------------------
+
+#想要精確算秒數 ── 用 Duration
+#想要對照日曆加減幾個月、幾年 ── 用 Period
+#有明確的開始與結束日期 ── 用 Interval
+'Duration' #絕對的秒數
+my_age <- today() - ymd("2004-01-01")
+class(my_age) #資料型態:"Duration"
+as.duration(my_age)
+class(as.duration(my_age)) #資料型態:"lubridate": always uses seconds
+
+dhours(c(12, 24)) #換成秒
+ddays(0:5)
+dyears(1) #一年有幾秒
+tomorrow <- today() + ddays(1)
+
+'Periods' #Human常用:小時、日、月(?)
+hours(c(12, 24)) #換成小時
+days(7)
+months(1:6)
+
+# A leap year
+# 跟Duration比較起來，比較像是我們想做的事
+ymd("2024-01-01") + dyears(1)
+ymd("2024-01-01") + years(1)
+
+'Intervals'  # start %--% end
+y2024 <- ymd("2024-01-01") %--% ymd("2025-01-01")
+#to find out how many days fit in the year:
+y2024 / days(1)
+
+# 17.5 Time zones ---------------------------------------------------------
+
+Sys.timezone() # your current time zone
+OlsonNames() # list of all time zone 
+
+# change the time zone in two ways:
+# 法一、when the instant is correct, but you want a more natural display
+x4a <- with_tz(x4, tzone = "Australia/Lord_Howe")
+x4a
+x4a - x4
+
+#法二、when you have an instant that has been labelled with the incorrect time zone, and you need to fix it.
+x4b <- force_tz(x4, tzone = "Australia/Lord_Howe")
+x4b
+x4b - x4
+
+# 18  Missing values ------------------------------------------------------
+library(tidyverse)
+
+# “last observation carried forward” (locf)
+treatment <- tribble(
+  ~person,           ~treatment, ~response,
+  "Derrick Whitmore", 1,         7,
+  NA,                 2,         10,
+  NA,                 3,         NA,
+  "Katherine Burke",  1,         4)
+treatment |>
+  fill(everything()) # !把上一個有資料的值沿用下去(?
+
+# coalesce(我的資料, NA要替換成什麼)
+x <- c(1, 4, 5, 7, NA)
+coalesce(x, )
+
+# 有時候NA會是99或-999這種樣子，此時，在讀資料進來時就可以先定義好:
+read_csv(path, na = "99")
+# 如果讀進來之後才發現: 用na_if(我的資料，其實是NA的數值)
+x <- c(1, 4, 5, 7, -99)
+na_if(x, -99)
+
+# 18.2.3 NaN --------------------------------------------------------------
+# (不定型?)出現 when perform a mathematical operation that has an indeterminate result
+x <- c(NA, NaN)
+is.na(x)
+is.nan(x)
+
+#  missing observations 分成 implicitly, explicitly.
+# explicitly: NA, NaN； implicitly: 像是資料不完整 某個月某個時段整個row不見 => 讓他變成explicitly，才看的到
+'complete()' #把 應該要存在的row寫出來，填上NA
+stocks |>
+  complete(year, qtr) # names of existing variables
+
+stocks |>
+  complete(year = 2019:2021, qtr) # provide your own data
+
+# 18.3.1 Pivoting ---------------------------------------------------------
+stocks <- tibble(
+  year  = c(2020, 2020, 2020, 2020, 2021, 2021, 2021),
+  qtr   = c(   1,    2,    3,    4,    2,    3,    4),
+  price = c(1.88, 0.59, 0.35,   NA, 0.92, 0.17, 2.66))
+
+stocks |>
+  pivot_wider(
+    names_from = qtr, 
+    values_from = price) #原本是implicit的就出現了!
+
+# 18.3.3 Joins ------------------------------------------------------------
+'anti_join()' # 讓行列數量對不起來的狀況顯示出來
+library(nycflights13)
+
+flights |> 
+  distinct(faa = dest) |> 
+  anti_join(airports)
+flights |> 
+  distinct(tailnum) |> 
+  anti_join(planes)
+
+# 18.4 Factors and empty groups -------------------------------------------
+
+health <- tibble(
+  name   = c("Ikaia", "Oletta", "Leriah", "Dashay", "Tresaun"),
+  smoker = factor(c("no", "no", "no", "no", "no"), levels = c("yes", "no")),
+  age    = c(34, 88, 75, 47, 56),)
+
+# 補齊組別 可以用在以下位置:
+# count()
+health |> count(smoker, .drop = FALSE) # request count() to keep all the groups, even those not seen in the data
+
+# 畫圖
+ggplot(health, aes(x = smoker)) +
+  geom_bar() +
+  scale_x_discrete(drop = FALSE) #  force levels that don’t have any values to display 
+
+# 分組
+health |> 
+  group_by(smoker, .drop = FALSE) |>  # .drop = FALSE: 先給NA值，再後續去做計算，所以會有Inf(?)
+  summarize(
+    n = n(),
+    mean_age = mean(age),
+    min_age = min(age),
+    max_age = max(age),
+    sd_age = sd(age))
+
+# 示範:
+health |> 
+  group_by(smoker) |> 
+  summarize(
+    n = n(),
+    mean_age = mean(age),
+    min_age = min(age),
+    max_age = max(age),
+    sd_age = sd(age)) |>  
+  complete(smoker) # complete(): 最後填上NA
+
+# 19  Joins ---------------------------------------------------------------
+library(tidyverse)
+library(nycflights13)
+
+# primary key: uniquely identifies each observation
+# compound key: more than one variable is needed
+
+# foreign key: corresponds to a primary key in another table
+
+# 19.2.2 Checking primary keys --------------------------------------------
+'count()'
+planes |> 
+  count(tailnum) |> # 一個col => 看是否是primary key
+  filter(n > 1)  # 看有沒有一個observation有兩個值
+
+weather |> 
+  count(time_hour, origin) |>  # 多個col => 看是否為compound key
+  filter(n > 1)
+
+# missing values 也要check，如果是NA的話就不是primary key
+weather |> 
+  filter(is.na(time_hour) | is.na(origin))
+
+# introducing a simple numeric surrogate key(id) using the row number:
+flights2 <- flights |> 
+  mutate(id = row_number(), .before = 1)
+flights2
+
+# 19.3 Basic joins --------------------------------------------------------
+
+
 
 
 
