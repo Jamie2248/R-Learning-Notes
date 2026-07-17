@@ -3003,6 +3003,160 @@ flights2 <- flights |>
 flights2
 
 # 19.3 Basic joins --------------------------------------------------------
+# dplyr provides six join functions
+flights2 <- flights |> 
+  select(year, time_hour, origin, dest, tailnum, carrier)
+
+'left_join()' # keeps all the rows in x(以左表(x)為主體， 絕對不刪除左表的任何一筆資料)
+flights2 |>
+  left_join(airlines) #R會自動找出 flights2 跟 airlines 裡面相同的col, 以便後續對照
+                      # 整個資料集，或是從資料集裡select col
+flights2 |> 
+  left_join(weather |> select(origin, time_hour, temp, wind_speed))
+
+'join_by()' # 分成equi join、non-equi joins 
+# 假如我的資料集裡有col name相同，會被R誤會的項目，我就得手動指定哪幾個才是要配對的col
+flights2 |> 
+  left_join(planes, join_by(tailnum)) #join_by(col_name)
+
+flights2 |> 
+  left_join(airports, join_by(dest == faa))
+flights2 |> 
+  left_join(airports, join_by(origin == faa))
+
+'inner_join()' # 只留下X跟Y能夠配對的上的row，且如果是一對多的話 會變longer；配對不上的col會在欄位名稱後面加上後綴（例如 .x 和 .y）來同時保留兩者，不會自動刪去
+'right_join()' 
+'full_join()' # X跟Y全都留下
+
+# Filtering joins -----------------------------
+
+'semi_join()' # keep all rows in x that have a match in y(合併完的表只會有X的col跟X的值, y的col只是拿來對齊用的，不會加進來)
+              airports |> 
+  semi_join(flights2, join_by(faa == origin))
+
+'anti-join()' # 跟semi相反，它return all rows in x that don’t have a match in y
+              # 用來找 implicit missing values
+# 範例: (find rows that are missing from airports by looking for flights that don’t have a matching destination airport)
+flights2 |> 
+  anti_join(airports, join_by(dest == faa)) |> 
+  distinct(dest)
+
+# 19.3.4 Exercises --------------------------------------------------------
+# Q1
+'Find the 48 hours (over the course of the whole year) that have the worst delays. '
+the_worst_48 <- flights |>
+  filter(!is.na(dep_delay)) |>
+  group_by(origin, time_hour) |> # 為什麼要切每個機場(出發地)?
+  summarize(avg_delay = mean(arr_delay)) |> 
+  slice_max(avg_delay, n = 48) # slice_max()
+
+'Cross-reference it with the weather data. Can you see any patterns?'
+the_worst_48 |>
+  left_join(weather, by = c("origin", "time_hour")) # 1.by? 2.怎麼選參數?
+
+# Q2
+top_dest <- flights2 |>
+  count(dest, sort = TRUE) |>
+  head(10)
+'find all flights to those destinations'
+# mine
+top_dest |>
+  right_join(flights, join_by(dest))
+# 正確解答
+flights2 |> semi_join(top_dest)
+
+# Q3
+'Does every departing flight have corresponding weather data for that hour?'
+# mine
+flights |>
+  anti_join(weather, join_by(hour == hour))
+# or:
+flights |>
+  anti_join(weather, by = c("origin", "year", "month", "day", "hour"))
+
+# Q4
+'What do the tail numbers that don’t have a matching record in planes have in common? (Hint: one variable explains ~90% of the problems.)'
+flights |>
+  anti_join(planes, by = "tailnum") |>
+55555  # 我想不到下面
+  count(carrier, sort = TRUE)
+
+# Q5
+'Add a column to planes that lists every carrier that has flown that plane'
+'expect that there’s an implicit relationship between plane and airline'
+# 我錯的
+planes |>
+  left_join(flights, join_by(tailnum))
+
+# 正解:
+# 第一步:先找出每台飛機(tailnum)實際被哪些航空公司(carrier)飛過
+plane_carriers <- flights |>
+  filter(!is.na(tailnum)) |>
+  distinct(tailnum, carrier)
+
+# 第二步:檢驗假設——如果「一台飛機只屬於一家航空公司」是對的,那麼每個 tailnum 應該只對應到一個 carrier:
+plane_carriers |>
+  count(tailnum) |>
+  filter(n > 1)
+
+# 如果這個結果不是空的,就代表假設是錯的——有些飛機確實被超過一家航空公司飛過(可能是飛機轉手買賣、或是子公司/合作航線共用機隊)。實際跑起來你會發現真的有一小批這樣的 tailnum,所以假設應該被推翻,一對一關係不成立。
+plane_carrier_list <- flights |>
+  filter(!is.na(tailnum)) |>
+  group_by(tailnum) |>
+  summarize(carriers = paste(sort(unique(carrier)), collapse = ", "))
+
+planes2 <- planes |>
+  left_join(plane_carrier_list, by = "tailnum")
+# paste(..., collapse = ", ") 是把一個字串向量(可能有好幾家航空)黏成一個單一字串,例如 "AA, MQ",方便放進單一欄位裡顯示。
+
+# Q6
+'幫 flights 加上起飛地/目的地機場的經緯度'
+#我在抄
+airports_small <- airports |> select(faa, lat, lon)
+
+flights_locs <- flights |>
+  left_join(
+    airports_small |> rename(origin = faa, origin_lat = lat, origin_lon = lon),
+    by = "origin"
+  ) |>
+  left_join(
+    airports_small |> rename(dest = faa, dest_lat = lat, dest_lon = lon),
+    by = "dest")
+
+'Is it easier to rename the columns before or after the join?'
+
+#
+glimpse(flights)
+glimpse(planes)
+
+# Q7
+'Compute the average delay by destination, '
+
+'then join on the airports data frame，show the spatial distribution of delays'
+install.packages("maps")
+library(maps)
+airports |>
+  semi_join(flights, join_by(faa == dest)) |>
+  ggplot(aes(x = lon, y = lat)) +
+  borders("state") +
+  geom_point() +
+  coord_quickmap()
+
+'use the size or color of the points to display the average delay for each airport.'
+
+# Q8
+'What happened on June 13 2013? Draw a map of the delays'
+
+
+
+
+
+
+
+
+
+
+
 
 
 
