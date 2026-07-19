@@ -3156,6 +3156,95 @@ airports |>
 
 
 
+# 19.5 Non-equi joins -----------------------------------------------------
+
+keep = TRUE # 除了X以外，也保留Y的key跟相對應的值
+# 示範:
+x |> inner_join(y, join_by(key == key), keep = TRUE)
+    # 第一個:x$key；第二個:y$key；==也可以用>=
+
+# 19.5.1 Cross joins ------------------------------------------------------
+
+# 像表格一樣 output會是n*m, n是X的nrow
+555555555好像不是這樣內 # = self-join 
+df <- tibble(name = c("John", "Simon", "Tracy", "Max"))
+df |> cross_join(df) #像取後放回的C幾取幾的結果可能性
+
+# 19.5.2 Inequality joins -------------------------------------------------
+
+df <- tibble(id = 1:4, name = c("John", "Simon", "Tracy", "Max"))
+df |> inner_join(df, join_by(id < id))
+
+# 19.5.3 Rolling joins ----------------------------------------------------
+
+join_by(closest(x <= y))
+# matches the smallest y that’s greater than or equal to x
+join_by(closest(x > y))
+# matches the biggest y that’s less than x.
+
+# 示範:
+parties <- tibble(
+  q = 1:4,
+  party = ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")))
+
+set.seed(123) #
+
+employees <- tibble(
+  name = sample(babynames::babynames$name, 100), # sample(data, 要抽幾個，replace = T or F)
+  birthday = ymd("2022-01-01") + (sample(365, 100, replace = TRUE) - 1))
+
+employees |> 
+  left_join(parties, join_by(closest(birthday >= party)))
+employees |> 
+  anti_join(parties, join_by(closest(birthday >= party)))
+
+# 19.5.4 Overlap joins ----------------------------------------------------
+
+between(x, y_lower, y_upper)
+within(x_lower, x_upper, y_lower, y_upper)
+overlaps(x_lower, x_upper, y_lower, y_upper)
+
+#範例:
+parties <- tibble(
+  q = 1:4,
+  party = ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")),
+  start = ymd(c("2022-01-01", "2022-04-04", "2022-07-11", "2022-10-03")),
+  end = ymd(c("2022-04-03", "2022-07-11", "2022-10-02", "2022-12-31")))
+  # to check that the party periods don’t overlap
+parties |> 
+55555  inner_join(parties, join_by(overlaps(start, end, start, end), q < q)) |>  # q < q是啥??
+  select(start.x, end.x, start.y, end.y)
+  #  fix that problem and continue
+parties <- tibble(
+  q = 1:4,
+  party = ymd(c("2022-01-10", "2022-04-04", "2022-07-11", "2022-10-03")),
+  start = ymd(c("2022-01-01", "2022-04-04", "2022-07-11", "2022-10-03")),
+  end = ymd(c("2022-04-03", "2022-07-10", "2022-10-02", "2022-12-31")))
+ # 第二次check
+employees |> 
+  inner_join(parties, join_by(between(birthday, start, end)), unmatched = "error") #unmatched = "error": quickly find out if any employees didn’t get assigned a party.
+
+# 19.5.5 Exercises --------------------------------------------------------
+
+# Q1
+'explain what’s happening with the keys in this equi join? Why are they different?'
+x |> full_join(y, join_by(key == key))
+#> # A tibble: 4 × 3
+#>     key val_x val_y
+#>   <dbl> <chr> <chr>
+#> 1     1 x1    y1   
+#> 2     2 x2    y2   
+#> 3     3 x3    <NA> 
+#> 4     4 <NA>  y3
+
+x |> full_join(y, join_by(key == key), keep = TRUE)
+#> # A tibble: 4 × 4
+#>   key.x val_x key.y val_y
+#>   <dbl> <chr> <dbl> <chr>
+#> 1     1 x1        1 y1   
+#> 2     2 x2        2 y2   
+#> 3     3 x3       NA <NA> 
+#> 4    NA <NA>      4 y3
 
 
 
@@ -3165,5 +3254,40 @@ airports |>
 
 
 
+# 20  Spreadsheets --------------------------------------------------------
 
+# 20.2 Excel
+library(readxl)
+library(tidyverse)
+library(writexl)
 
+read_xls()
+read_xlsx()
+read_excel() # 自動猜是xls還是xlsx
+
+# 練習讀檔案
+#法一、直接用檔名，視情況補上資料夾路徑
+# 因為是存在大資料夾底下的小資料夾 而現在專案試設在大資料夾，所以要補上小資料夾的路徑/)
+students <- read_excel("r4ds/students.xlsx") 
+# 法二、去檔案總管複製路徑，用()包起來 然後加上r""
+students <- read_excel(r"(C:\Users\USER\OneDrive\桌面\my_tools.R\R-Learning-Notes\r4ds\students.xlsx)")
+
+# 我要自己設新col name,所以用skip跟col_names這兩個argument)
+students <- read_excel(
+  "r4ds/students.xlsx",
+  col_names = c("student_id", "full_name", "favourite_food", "meal_plan", "age"),
+  skip = 1,
+  na = c('', "N/A")) #, #告訴R哪些他沒偵測到是NA
+# col_types = c("numeric", "text", "text", "text", "numeric")) #會把不符合指定資料型態的資料變成NA
+
+#如果發現有資料型態不對的狀況 可以這樣改
+students <- students |>
+  mutate(
+    age = if_else(age == "five", "5", as.character(age)), #存成chr是因為這樣能最完整保存所有資訊，後續再轉成數值
+    age = parse_number(age)) # 把一串文字裡的述直剝出來
+
+students
+
+# 補充: 簡化版 if_else
+case_match() #1.支援多對一(就不用寫很長的|式子) 2.
+c("five", "5", "Five") ~ "5" #1. <-- 舉例
