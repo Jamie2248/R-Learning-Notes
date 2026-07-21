@@ -3288,6 +3288,136 @@ students <- students |>
 
 students
 
-# 補充: 簡化版 if_else
+# 補充: 一、簡化版 if_else
 case_match() #1.支援多對一(就不用寫很長的|式子) 2.
 c("five", "5", "Five") ~ "5" #1. <-- 舉例
+
+# 補充: 二、用之前學過的join
+# 1. 建立一張對照表（字典）
+age_dictionary <- tibble(
+  raw_age = c("one", "two", "three", "four", "five", "six"), # 這裡可以放幾百個
+  clean_age = c("1", "2", "3", "4", "5", "6")
+)
+# 2. 用 left_join 瞬間完成對應，完全不用寫 case_match
+students <- students |> 
+  left_join(age_dictionary, by = c("age" = "raw_age")) |> 
+  mutate(age = if_else(is.na(clean_age), age, clean_age)) |>  #也可以寫mutate(age = coalesce(clean_age, age)) =>如果clean_age有值 就用clean_age,沒值(是NA)的話 就用接下來後面的 在這邊也就是age
+  select(-clean_age) # 負號:刪除該欄位
+
+
+# 20.2.4 Reading worksheets -----------------------------------------------
+# 換讀新資料集
+read_excel(r"(C:\Users\USER\OneDrive\桌面\my_tools.R\R-Learning-Notes\r4ds\penguins.xlsx)", sheet = "Torgersen Island")
+
+# 注意到是chr這個資料型態的欄位底下有NA，這樣其實不是真正的NA 而是文字NA 
+# 所以應該要在讀表時手動指定na = "NA"
+penguins_torgersen <- read_excel(r"(C:\Users\USER\OneDrive\桌面\my_tools.R\R-Learning-Notes\r4ds\penguins.xlsx)", 
+                                 sheet = "Torgersen Island", 
+                                 na = "NA")
+penguins_torgersen
+
+# 看我的檔案裡所有sheet有哪些:
+excel_sheets("檔案路徑")
+# 看某個sheet的欄列數
+dim(penguins_torgersen)
+# 在col數相同的情況下 可以用bind_rows()合併不同sheet
+    #(先讀取其他col數同的sheet)
+penguins_biscoe <- read_excel("data/penguins.xlsx", sheet = "Biscoe Island", na = "NA")
+penguins_dream  <- read_excel("data/penguins.xlsx", sheet = "Dream Island", na = "NA")
+    #(合併成一個)
+penguins <- bind_rows(penguins_torgersen, penguins_biscoe, penguins_dream)
+penguins
+
+# 20.2.7 Writing to Excel -------------------------------------------------
+write_xlsx() #write data back to disk as an Excel file
+#示範:
+bake_sale <- tibble(
+  item     = factor(c("brownie", "cupcake", "cookie")),
+  quantity = c(10, 5, 8)
+) #1.先在R裡有一個資料框
+write_xlsx(bake_sale, path = "data/bake-sale.xlsx") #參數:col_names、format_headers = F
+#2.把指定名稱的資料框存在給定路徑裡
+
+# 就像是CSV裡的資料都是str一樣,再把剛剛存的檔案重新讀進來時，資料型態會跑掉
+
+# 補充: grepl() = str_detect()，括號內都是pattern, x(x是欄位或向量，我要找的範圍)
+
+# Exercise ---------------------
+
+# 假設原始資料表叫做 sales
+tidy_sales <- sales %>%
+  # 1. 直接新增一欄 brand，如果 id 欄位有包含 "Brand" 就抓過來，沒有就留 NA
+  mutate(brand = ifelse(stringr::str_detect(id, "Brand"), id, NA)) %>%
+  
+  # 2. 把 brand 欄位的 NA 往下填滿
+  fill(brand, .direction = "down") %>%
+  
+  # 3. 排除掉不需要的資料列（把 id 包含 "Brand" 以及 n 等於 "n" 的列刪除）
+  filter(!str_detect(id, "Brand"), n != "n") %>% #n != "n"可以寫成n!=n,只是雙重保障而已
+  
+  # 4. 把 id 和 n 轉換成題目要求的數值型態 (numeric / dbl)
+  mutate(
+    id = as.numeric(id),
+    n = as.numeric(n)
+  ) %>%
+  
+  # 5. 調整欄位順序，讓 brand 排在第一個
+  select(brand, id, n)
+
+# 查看結果
+print(tidy_sales)
+
+# 20.3 Google Sheets ------------------------------------------------------
+
+library(googlesheets4)
+library(tidyverse)
+
+# reads a Google Sheet from a URL or a file id:
+read_sheet() #跟read_excel()差不多一樣，不一樣的:col_types = "dcccc" => “double, character, character, character, character”的意思
+range_read() #read in a portion of a Google Sheet 
+# 示範:
+deaths_url <- gs4_example("deaths")
+deaths <- read_sheet(deaths_url, range = "A5:F15")
+
+# (?)
+gs4_deauth()
+#如果是要讀需要權限 要登入的google表單
+gs4_auth() 
+#示範:
+gs4_auth(email = "mine@example.com")
+
+# 存id(?)
+students_sheet_id <- "1V1nPp1tzOuutXFLb3G9Eyxi3qxeEhnOXUzL5_BcCQ0w"
+students <- read_sheet(students_sheet_id)
+
+# get sheet names
+sheet_names()
+
+# 20.3.4 Writing to Google Sheets -----------------------------------------
+# 括號內參數依序是: 在R裡的資料框名稱，我要存進去的檔案名稱，存成新sheet的名稱
+write_sheet(bake_sale, ss = "bake-sale", sheet = "Sales")
+
+# 25  Functions -----------------------------------------------------------
+library(tidyverse)
+library(nycflights13)
+# function's template
+name <- function(arguments) {
+  body
+}
+
+name(arguments)
+#
+
+# 課本範例:
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE) #range(data) => c((min, max))
+  (x - rng[1]) / (rng[2] - rng[1]) #2是max, 1是min
+}
+
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE, finite = TRUE) # ignore infinite values
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+
+
+
