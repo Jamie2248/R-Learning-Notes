@@ -3401,23 +3401,166 @@ write_sheet(bake_sale, ss = "bake-sale", sheet = "Sales")
 library(tidyverse)
 library(nycflights13)
 # function's template
-name <- function(arguments) {
+name <- function(arguments) { #定義我的function
   body
 }
 
-name(arguments)
+name(arguments) #使用我定義的function
 #
 
-# 課本範例:
+# 課本範例:--------------------
+#(wrong one)
 rescale01 <- function(x) {
   rng <- range(x, na.rm = TRUE) #range(data) => c((min, max))
   (x - rng[1]) / (rng[2] - rng[1]) #2是max, 1是min
 }
-
+#(correct)
 rescale01 <- function(x) {
   rng <- range(x, na.rm = TRUE, finite = TRUE) # ignore infinite values
   (x - rng[1]) / (rng[2] - rng[1])
 }
+# z score function-------------
+z_score <- function(x){
+  (x - mean(x, na.rm = T) / sd(x, na.rm = T))
+}
+z_score(c(1,2,3,4,5))
+#-------------------------------
+y = c("hello", "flower")
+str_sub(y, 2, 1) # str_sub(x, 從第幾位開始取, 取到底幾位)
+str_to_upper(y)
+
+first_upper <- function(y){
+  str_sub(y, 1, 1) <- str_to_upper(str_sub(y, 1, 1)) #!把要變不同的東西抓出來 指定新的值
+  y
+}
+first_upper("oooo")
+#------------------------------
+clean_num <- function(x){
+  is_pct <-str_detect(x, "%") #先看有沒有百分比，get T F
+  num <- x |> #沒有的話就去掉符號，存成數字
+    str_remove_all("%") |> 
+    str_remove_all(",") |> 
+    str_remove_all(fixed("$")) |>
+    as.numeric()
+  ifelse(is_pct, num/100, num) #有的話就換算單位
+} #蛤 ifelse跟if_else一樣嗎?
+clean_num("$12,300")
+clean_num("45%")
+
+#if you have a bunch of variables that record missing values as 997, 998, or 999---------------
+fix_na <- function(x){
+  if_else(x %in% c(997, 998, 999), NA, x) #! 
+} # string => str_detect，搭配 正規表示法（Regular Expression）的符號
+  # number/string => %in% 或 match，差在前者是不管是數字還是字串，只要想檢查「有沒有在名單內」；後者可以知道是第幾個位置
+
+#---------------------------------
+commas <- function(x) {
+  str_flatten(x, collapse = ',', last = 'and') #str_flatten可以把向量c()變成長度是1
+}
+commas(c('jam', 'i', 'e'))
+
+# ...的用法 & 看不懂的課本範例-----------------------
+#1.
+cv_dots <- function(x, ...) { #...會幫我複製貼上我執行函數時 給定的參數
+  sd(x, ...) / mean(x, ...)
+}
+cv_dots(my_data, trim = 0.1) # trim = 0.1 代表計算平均時，先削掉極端值
+#2.
+cv <- function(x, na.rm = FALSE) {
+  sd(x, na.rm = na.rm) / mean(x, na.rm = na.rm)
+}
+cv(runif(100, min = 0, max = 50)) # runif = Random Uniform，不會有遺失值的隨機抽數字。(要抽幾個，min, max)
+
+# count NA number-------------------------
+n_missing <- function(x) {
+  sum(is.na(x))
+}
+n_missing(c(5, 9, NA, 8, NA))
+
+#note
+#  find the definition of a function that you’ve written, place the cursor on the name of the function and press fn + F2
+
+# 25.3.1 Indirection and tidy evaluation ----------------------------------
+
+grouped_mean <- function(df, group_var, mean_var) {
+  df |> 
+    group_by({{ group_var }}) |>  #用embracing(雙大括號)，讓R去找更深層的東西 而不是直接當成變數名稱去找
+    summarize(mean({{ mean_var }}))
+}
+
+df |> grouped_mean(group, x) 
+#上一行那樣是靠"順序"來對應誰跟哪個雙大括號有關聯
+#也可以"指名道姓": df |> grouped_mean(mean_var = x, group_var = group)
+
+#示範怎麼用這個函數:
+# 一、建立一份假的成績單
+score_df <- tibble(
+  class = c("A班", "A班", "B班", "B班"),
+  math  = c(90, 80, 70, 60),
+  eng   = c(100, 90, 85, 75)
+)
+# 二、我想用上面已經建好的函數算各班指定科目的平均分數
+score_df |> grouped_mean(class, math)
+
+#! 定義函數，有用到 dplyr 的時候，裡面填欄位名稱「不需要加引號」的那個參數要用 {{ }} 包起來。!通常包起來的會是"欄位名稱"
+# (也就是|>後面的動作 它的括號裡如果沒有引號 就要用雙大括號保護起來 才不會被當成變數名稱)
+
+#課本範例:
+summary6 <- function(data, var) {
+  data |> summarize(
+    min = min({{ var }}, na.rm = TRUE),
+    mean = mean({{ var }}, na.rm = TRUE),
+    median = median({{ var }}, na.rm = TRUE),
+    max = max({{ var }}, na.rm = TRUE),
+    n = n(),
+    n_miss = sum(is.na({{ var }})),
+    .groups = "drop" #前面有用summarize的話都要記得最後拆掉組別!
+  )
+}
+
+diamonds |> summary6(carat) #1. carat的6個summary number
+diamonds |>  #2. 各個cut等級的6個carat summary numbers
+  group_by(cut) |> 
+  summary6(carat)
+#範例:
+count_prop <- function(df, var, sort = FALSE) {
+  df |>
+    count({{ var }}, sort = sort) |>
+    mutate(prop = n / sum(n))
+}
+
+diamonds |> count_prop(clarity)
+
+# 指定condition (Find all the destinations in December):
+unique_where <- function(df, condition, var) {
+  df |> 
+    filter({{ condition }}) |> 
+    distinct({{ var }}) |> 
+    arrange({{ var }})
+}
+flights |> unique_where(month == 12, dest)
+
+# 取特定欄位及條件的行列出來:
+subset_flights <- function(rows, cols) {
+  flights |> 
+    filter({{ rows }}) |> 
+    select(time_hour, carrier, flight, {{ cols }})
+}
+
+#重要區分!
+'資料遮罩 (Data-masking) :關注的是欄位裡面的「數值計算」（如 mean(), >, +）。'
+'整潔選取 (Tidy-selection) :關注的是欄位本身的「名稱與位置」（如 : 連續選取, any_of(), starts_with()）。'
+
+
+
+
+
+
+
+
+
+
+
 
 
 
